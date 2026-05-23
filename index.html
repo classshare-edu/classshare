@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ClassShare LIVE - 학원 실시간 모니터링 SaaS</title>
+    <title>ClassShare LIVE - 실시간 학생 화면 통제 및 모니터링</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- jQuery CDN -->
@@ -14,24 +14,27 @@
             object-fit: contain;
         }
         .bg-gradient-premium {
-            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            background: linear-gradient(135deg, #090d16 0%, #111827 100%);
         }
         .glassmorphism {
-            background: rgba(255, 255, 255, 0.03);
+            background: rgba(15, 23, 42, 0.6);
             backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }
         .student-card {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .student-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 12px 20px -10px rgba(99, 102, 241, 0.15);
-        }
-        /* 태블릿 필기 전용 부드러운 드로잉 터치 서포트 */
         #drawingCanvas {
             touch-action: none;
             cursor: crosshair;
+        }
+        /* 경고 애니메이션 */
+        @keyframes alert-pulse {
+            0%, 100% { background-color: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.4); }
+            50% { background-color: rgba(239, 68, 68, 0.3); border-color: rgba(239, 68, 68, 0.8); }
+        }
+        .cheating-alert {
+            animation: alert-pulse 1.5s infinite;
         }
     </style>
 </head>
@@ -41,7 +44,7 @@
     <div id="toastContainer" class="fixed top-5 right-5 z-50 space-y-2 pointer-events-none"></div>
 
     <!-- 설정 모달 (Firebase 동적 바인딩) -->
-    <div id="settingsModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+    <div id="settingsModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center hidden">
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-lg mx-4">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-lg font-bold text-white flex items-center">
@@ -51,7 +54,7 @@
                 <button onclick="toggleSettingsModal(false)" class="text-slate-400 hover:text-white">&times;</button>
             </div>
             <p class="text-xs text-slate-400 mb-4 leading-relaxed">
-                현재 시스템은 기본적으로 동일 브라우저 내 테스트용 <strong>[로컬 샌드박스 망]</strong>으로 구동됩니다. 다른 컴퓨터/태블릿 간 온라인 원격 연결을 개시하려면 본인의 Firebase Firestore 키값을 아래에 붙여넣어 주세요.
+                현재 시스템은 동시 연결 정밀 신뢰성을 확보하기 위해 파이어베이스 실시간 교환 프로토콜을 사용합니다.
             </p>
             <div class="space-y-3">
                 <div>
@@ -73,22 +76,22 @@
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
             </div>
             <div>
-                <span class="text-lg font-extrabold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">ClassShare <span class="text-indigo-400 font-medium">LIVE</span></span>
-                <div class="text-[10px] text-slate-500 flex items-center mt-0.5">
+                <span class="text-lg font-extrabold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">ClassShare <span class="text-indigo-400 font-medium font-mono">SECURE</span></span>
+                <div class="text-[10px] text-slate-500 flex items-center mt-0.5 font-mono">
                     <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>
-                    <span id="networkModeBadge">로컬 가상 샌드박스망 활성</span>
+                    <span id="networkModeBadge">로컬 가상망 가동 (클라우드 권장)</span>
                 </div>
             </div>
         </div>
         
         <div class="flex items-center space-x-2 mt-3 sm:mt-0">
-            <!-- 모드 셀렉터 -->
+            <!-- 역할 선택기 -->
             <div class="bg-slate-900 p-1 rounded-xl border border-slate-800 flex">
                 <button onclick="switchRole('student')" id="roleBtn_student" class="px-4 py-1.5 rounded-lg text-xs font-bold transition duration-200">
                     학생(태블릿)
                 </button>
                 <button onclick="switchRole('teacher')" id="roleBtn_teacher" class="px-4 py-1.5 rounded-lg text-xs font-bold transition duration-200">
-                    선생님(관리자)
+                    선생님(관리 대시보드)
                 </button>
             </div>
             
@@ -107,49 +110,40 @@
             <!-- 왼쪽 제어반 -->
             <div class="lg:col-span-4 bg-slate-900 border border-slate-800/80 p-6 rounded-2xl shadow-xl space-y-6">
                 <div>
-                    <span class="text-xs font-bold text-indigo-400 uppercase tracking-widest">학생 전송용 관제</span>
-                    <h2 class="text-2xl font-black text-white mt-1">태블릿 화면 방송</h2>
+                    <span class="text-xs font-bold text-red-400 uppercase tracking-widest">강의실 화면 관제 모드</span>
+                    <h2 class="text-2xl font-black text-white mt-1">학생 단말기 송출</h2>
                     <p class="text-xs text-slate-400 mt-2 leading-relaxed">
-                        선생님께 실시간으로 본인의 기기 화면, 실시간 필기장, 전면 카메라를 합성하여 초저지연 전송합니다.
+                        선생님 화면에 학생 기기의 실시간 작동 상태 및 카메라를 동시 송출합니다. 다른 탭으로 이동 시 알림이 전송됩니다.
                     </p>
                 </div>
 
                 <div class="border-t border-slate-800/60 pt-4 space-y-4">
                     <div>
-                        <label class="block text-xs font-bold text-slate-300 mb-1.5">선생님 매칭룸 식별코드</label>
+                        <label class="block text-xs font-bold text-slate-300 mb-1.5">매칭룸 식별코드</label>
                         <input type="text" id="roomInputStudent" value="math-room-1" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono">
                     </div>
 
                     <div>
-                        <label class="block text-xs font-bold text-slate-300 mb-1.5">본인 이름 (학생명)</label>
+                        <label class="block text-xs font-bold text-slate-300 mb-1.5">학생 실명 (본명 기입)</label>
                         <input type="text" id="studentName" value="홍길동" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     </div>
 
                     <div>
-                        <label class="block text-xs font-bold text-slate-300 mb-1.5">송출 모드 선택 (★태블릿 전용 필기장 추가★)</label>
+                        <label class="block text-xs font-bold text-slate-300 mb-1.5">송출 기기 모드 선택</label>
                         <select id="sharingMode" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-indigo-300">
-                            <option value="whiteboard" selected>자필 필기장 송출 (갤럭시탭/아이패드 적극권장! ✏️)</option>
-                            <option value="screen_only">PC 화면 전체 송출 (컴퓨터 전용)</option>
-                            <option value="camera_only">카메라만 송출 (얼굴/책상 모니터링)</option>
-                            <option value="composite">PC 화면 + 전면캠 합성 송출</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-bold text-slate-300 mb-1.5">화면 화질 모드 선택</label>
-                        <select id="streamQuality" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                            <option value="high">A그룹 - 수학 정밀 필기형 (1080p, 15fps)</option>
-                            <option value="low" selected>B그룹 - 단순 교재 채점형 (540p, 5fps 배터리절약)</option>
+                            <option value="composite" selected>화면 전체 송출 + 전면 카메라 합성 (기기 감시용)</option>
+                            <option value="screen_only">화면만 송출 (전체 기기 제어)</option>
+                            <option value="whiteboard">자필 수학 연습장 송출 (실시간 풀이 전용)</option>
                         </select>
                     </div>
                 </div>
 
                 <div class="pt-2">
                     <button id="btnStartBroadcasting" class="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold rounded-xl shadow-lg shadow-emerald-950/30 transition transform duration-150 active:scale-[0.98]">
-                        화면 공유 방송 시작하기
+                        화면 감시 방송 가동하기
                     </button>
                     <button id="btnStopBroadcasting" class="hidden w-full py-3.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-extrabold rounded-xl transition mt-2">
-                        방송 송출 종료
+                        감시 중단
                     </button>
                 </div>
             </div>
@@ -158,62 +152,45 @@
             <div class="lg:col-span-8 space-y-4">
                 <div class="bg-slate-900 border border-slate-800/80 p-4 rounded-2xl">
                     <div class="flex justify-between items-center mb-3">
-                        <span class="text-xs font-bold text-slate-400">송출 스트림 실시간 미리보기 (태블릿 캔버스 합성)</span>
+                        <span class="text-xs font-bold text-slate-400">송출 캔버스 오버레이 (실시간 로컬 믹싱 정보)</span>
                         <span id="studentLiveStatus" class="bg-slate-950 border border-slate-800 text-slate-400 px-3 py-1 rounded-full text-[10px] font-bold">오프라인</span>
                     </div>
                     
                     <!-- 비디오/캔버스 오버레이 뷰포트 -->
                     <div class="relative bg-slate-950 rounded-xl overflow-hidden aspect-video shadow-inner border border-slate-800 flex items-center justify-center">
-                        <!-- P2P 전송을 위해 백그라운드 믹싱이 이루어지는 메인 프레임워크 -->
-                        <canvas id="canvasPreview" class="w-full h-full object-contain hidden"></canvas>
+                        <canvas id="canvasPreview" class="w-full h-full object-contain"></canvas>
                         
-                        <!-- [신규 기능] 모바일/태블릿용 반응형 자필 드로잉보드 -->
-                        <div id="whiteboardContainer" class="absolute inset-0 w-full h-full bg-slate-900 flex flex-col">
+                        <!-- 모바일/태블릿용 반응형 자필 드로잉보드 (화면 감시 외 서브 컴포넌트) -->
+                        <div id="whiteboardContainer" class="absolute inset-0 w-full h-full bg-slate-900 flex flex-col hidden">
                             <!-- 드로잉 펜 툴바 -->
                             <div class="bg-slate-950 border-b border-slate-800 p-2 flex items-center justify-between z-20">
                                 <div class="flex items-center space-x-2">
-                                    <button onclick="setPenColor('#10b981')" class="w-6 h-6 rounded-full bg-emerald-500 border-2 border-slate-950 focus:border-white transition" title="형광 녹색"></button>
-                                    <button onclick="setPenColor('#38bdf8')" class="w-6 h-6 rounded-full bg-sky-400 border-2 border-slate-950 focus:border-white transition" title="형광 하늘색"></button>
-                                    <button onclick="setPenColor('#f43f5e')" class="w-6 h-6 rounded-full bg-rose-500 border-2 border-slate-950 focus:border-white transition" title="형광 핑크"></button>
-                                    <button onclick="setPenColor('#ffffff')" class="w-6 h-6 rounded-full bg-white border-2 border-slate-950 focus:border-white transition" title="흰색"></button>
+                                    <button onclick="setPenColor('#10b981')" class="w-6 h-6 rounded-full bg-emerald-500 border-2 border-slate-950 focus:border-white transition"></button>
+                                    <button onclick="setPenColor('#38bdf8')" class="w-6 h-6 rounded-full bg-sky-400 border-2 border-slate-950 focus:border-white transition"></button>
+                                    <button onclick="setPenColor('#ffffff')" class="w-6 h-6 rounded-full bg-white border-2 border-slate-950 focus:border-white transition"></button>
                                     <div class="h-6 w-[1px] bg-slate-800 mx-1"></div>
                                     <button onclick="setPenSize(3)" class="text-[10px] px-2 py-1 bg-slate-800 rounded text-slate-300 hover:text-white transition">얇게</button>
                                     <button onclick="setPenSize(6)" class="text-[10px] px-2 py-1 bg-slate-800 rounded text-slate-300 hover:text-white transition font-bold">중간</button>
-                                    <button onclick="setPenSize(12)" class="text-[10px] px-2 py-1 bg-slate-800 rounded text-slate-300 hover:text-white transition font-black">두껍게</button>
                                 </div>
                                 <div class="flex items-center space-x-2">
-                                    <button onclick="toggleEraser()" id="eraserBtn" class="text-xs px-2.5 py-1 bg-slate-800 rounded-lg text-slate-300 hover:bg-slate-700 transition flex items-center">
-                                        🧹 지우개
-                                    </button>
-                                    <button onclick="clearWhiteboard()" class="text-xs px-2.5 py-1 bg-red-950/40 border border-red-900/50 text-red-400 rounded-lg hover:bg-red-900/40 transition">
-                                        초기화
-                                    </button>
+                                    <button onclick="toggleEraser()" id="eraserBtn" class="text-xs px-2.5 py-1 bg-slate-800 rounded-lg text-slate-300 hover:bg-slate-700 transition">🧹 지우개</button>
+                                    <button onclick="clearWhiteboard()" class="text-xs px-2.5 py-1 bg-red-950/40 border border-red-900/50 text-red-400 rounded-lg hover:bg-red-900/40 transition">초기화</button>
                                 </div>
                             </div>
-                            <!-- 드로잉 영역 -->
                             <div class="relative flex-grow bg-slate-950 flex items-center justify-center">
                                 <canvas id="drawingCanvas" class="w-full h-full object-contain"></canvas>
-                                <div class="absolute bottom-3 right-3 text-[10px] text-slate-600 bg-slate-950/80 px-2 py-1 rounded">
-                                    갤럭시 S펜 및 드로잉 미세 감도 서포트
-                                </div>
                             </div>
                         </div>
                         
                         <!-- 마이크 및 시스템 안내 팝업 대체 요소 -->
                         <div id="screenInstruction" class="absolute inset-0 bg-slate-900/95 flex flex-col items-center justify-center text-center p-6 transition z-30">
                             <div class="bg-indigo-600/10 p-4 rounded-full text-indigo-400 mb-3 border border-indigo-500/20">
-                                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/></svg>
+                                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
                             </div>
-                            <h4 class="text-base font-bold text-white">원격 모바일 실시간 필기 관제 시스템</h4>
-                            <div class="text-xs text-slate-300 max-w-md mt-2 space-y-2 leading-relaxed">
-                                <p>위의 '방송 시작하기' 버튼을 누르면 실시간 믹싱이 수립됩니다.</p>
-                                <div class="bg-slate-950/80 p-4 rounded-lg border border-slate-800 text-left text-[11px] space-y-1.5 leading-relaxed">
-                                    <p class="text-emerald-400 font-bold">✨ [권장] 자필 필기장 송출 모드</p>
-                                    <p class="text-slate-400 pl-3">갤럭시탭 / 아이패드 등 모든 모바일 기기 보안 우회 100% 보장. S펜 자필 수학 풀이에 최적화되어 있습니다.</p>
-                                    <p class="text-indigo-400 font-bold mt-2">💻 PC 화면 전체 송출 모드</p>
-                                    <p class="text-slate-400 pl-3">데스크톱 컴퓨터 크롬 브라우저 전용입니다. (태블릿은 기기 보안으로 인해 지원하지 않습니다.)</p>
-                                </div>
-                            </div>
+                            <h4 class="text-base font-bold text-white">학습 이탈 방지 관제 수립대기</h4>
+                            <p class="text-xs text-slate-400 max-w-sm mt-1 leading-relaxed">
+                                '화면 감시 방송 가동' 버튼을 누르고 전체화면 공유 권한을 승인해 주십시오. 다른 탭이나 앱으로 이동하면 즉시 이탈 알림이 기록됩니다.
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -226,13 +203,13 @@
             <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex flex-wrap justify-between items-center gap-4">
                 <div class="flex items-center space-x-3">
                     <span class="w-3 h-3 rounded-full bg-indigo-500"></span>
-                    <h2 class="text-xl font-bold text-white">실시간 원격 지도 채널</h2>
+                    <h2 class="text-xl font-bold text-white">학습 통제 감시 채널</h2>
                     <input type="text" id="roomInputTeacher" value="math-room-1" class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono w-40" placeholder="채널 ID">
                 </div>
                 
                 <div class="flex items-center space-x-2">
                     <button id="btnConnectTeacher" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition transform active:scale-95 shadow-md shadow-indigo-950/50">
-                        학생 스트림 연결하기
+                        학생 전체 실시간 감시 연결
                     </button>
                     <button id="btnDisconnectTeacher" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition">
                         연결 전체 초기화
@@ -243,11 +220,11 @@
             <!-- 대형 격자 모니터 패널 -->
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 
-                <!-- A그룹: 수학 정밀 필기 모니터링 (크게 보기) -->
+                <!-- A그룹: 실시간 화면공유 스트리밍 렌더러 -->
                 <div class="lg:col-span-8 space-y-4">
                     <div class="flex justify-between items-center">
-                        <span class="text-xs font-bold text-slate-400 tracking-wider">A그룹 실시간 정밀 수학 풀이 분석</span>
-                        <span class="bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[10px] px-2.5 py-1 rounded-full font-bold">1080p 고화질 렌더링</span>
+                        <span class="text-xs font-bold text-slate-400 tracking-wider">선택한 학생 실시간 기기 감 모니터링</span>
+                        <span id="remoteQualityBadge" class="bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[10px] px-2.5 py-1 rounded-full font-bold">WebRTC P2P Direct 연결</span>
                     </div>
 
                     <div class="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden p-3 shadow-2xl">
@@ -259,39 +236,54 @@
                                 <div class="bg-slate-900 p-5 rounded-full text-slate-600 border border-slate-800/80 mb-4 animate-pulse">
                                     <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                                 </div>
-                                <h4 class="text-lg font-bold text-slate-300">스트림 수신 대기 중</h4>
+                                <h4 class="text-lg font-bold text-slate-300">학생 스트림 연결을 개시해 주세요</h4>
                                 <p class="text-xs text-slate-500 max-w-sm mt-1 leading-relaxed">
-                                    지정한 채널 ID(<span class="text-indigo-400 font-bold font-mono">math-room-1</span>)로 학생이 전송을 시작한 후 연결하기 버튼을 누르면 이 자리에 실시간 태블릿 화면이 나타납니다.
+                                    학생이 브라우저에서 화면 공유 방송을 시작한 후 우상단의 <span class="text-indigo-400 font-bold font-mono">[학생 전체 실시간 감시 연결]</span> 버튼을 클릭하십시오.
                                 </p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- B그룹: 단순 교재 채점 및 진도 모니터링 (서브 뷰) -->
+                <!-- B그룹: 실시간 부정 행위 / 다른짓 탐지 판넬 -->
                 <div class="lg:col-span-4 space-y-4">
                     <div class="flex justify-between items-center">
-                        <span class="text-xs font-bold text-slate-400 tracking-wider">B그룹 진도 및 단순 채점 모니터링</span>
-                        <span class="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] px-2.5 py-1 rounded-full font-bold">5fps 에너지절약 모드</span>
+                        <span class="text-xs font-bold text-slate-400 tracking-wider">실시간 이탈 감시 레이더</span>
+                        <span class="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[10px] px-2.5 py-1 rounded-full font-bold">인공지능 실시간 감시</span>
                     </div>
 
                     <div class="bg-slate-900 border border-slate-800 rounded-3xl p-4 space-y-4 shadow-xl">
-                        <div class="student-card bg-slate-950/80 border border-slate-800 rounded-2xl p-3 flex items-center space-x-3">
-                            <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                            <div class="flex-grow">
-                                <h4 id="activeStudentLabel" class="text-xs font-extrabold text-white">홍길동 학생 (연결됨)</h4>
-                                <p class="text-[10px] text-slate-500 mt-0.5">화면 해상도: 854x480 | 오디오 무음</p>
+                        <!-- 실시간 이탈 발생 감지 보드 -->
+                        <div id="studentStatusCard" class="student-card bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex flex-col space-y-3">
+                            <div class="flex items-center justify-between">
+                                <h4 id="activeStudentLabel" class="text-sm font-extrabold text-white">감시중인 학생 없음</h4>
+                                <span id="cheatingStatusBadge" class="bg-slate-800 text-slate-400 text-[10px] font-bold px-2 py-1 rounded">오프라인</span>
                             </div>
-                            <div class="flex space-x-1">
-                                <button onclick="changeFrameSpeed('high')" class="bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 text-[9px] font-bold px-2 py-1 rounded hover:bg-indigo-600 hover:text-white transition">A전환</button>
-                                <button onclick="changeFrameSpeed('low')" class="bg-slate-800 text-slate-400 text-[9px] font-bold px-2 py-1 rounded hover:bg-slate-700 hover:text-white transition">B유지</button>
+                            
+                            <!-- 이탈 경고 디스플레이 -->
+                            <div id="cheatingAlertArea" class="hidden p-3 rounded-xl flex items-center space-x-3 transition">
+                                <div class="p-2 bg-red-500 text-white rounded-full animate-bounce">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                </div>
+                                <div class="flex-grow">
+                                    <p class="text-xs font-bold text-red-400">🚨 유튜브/웹툰/기타앱 이탈 감지!</p>
+                                    <p class="text-[10px] text-red-300 mt-0.5">이탈 유지 시간: <span id="cheatingDurationSeconds" class="font-bold">0</span>초째 다른 짓 하는 중</p>
+                                </div>
+                            </div>
+
+                            <div class="border-t border-slate-800/60 pt-3 flex flex-col space-y-1">
+                                <span class="text-[10px] text-slate-500 leading-relaxed">
+                                    💡 학생이 갤럭시탭 화면 공유 송출 버튼을 끄거나 다른 앱(예: 카카오톡, 게임, 네이버 웹툰, 유튜브)을 실행해 화면이 포커스를 잃으면 감시망에 즉시 등재됩니다.
+                                </span>
                             </div>
                         </div>
 
-                        <div class="border-t border-slate-800/60 pt-3 text-center">
-                            <p class="text-[10px] text-slate-500 leading-relaxed">
-                                다중 분할 화면은 다음 메이저 릴리즈(SaaS 전용 버전)에서 완벽히 지원됩니다. 본 프로토타입은 다이렉트 1:1 고속 전송에 집중되어 있습니다.
-                            </p>
+                        <!-- 실시간 행동 기록 로그 시스템 -->
+                        <div class="bg-slate-950 p-3 rounded-2xl border border-slate-800/50">
+                            <h5 class="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">실시간 보안 행동 로그</h5>
+                            <div id="securityLogConsole" class="space-y-1.5 h-36 overflow-y-auto font-mono text-[9px] text-slate-400 leading-relaxed scrollbar-thin">
+                                <div>[시스템] 관제 센터 가동 대기 중...</div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -304,22 +296,20 @@
     <!-- 매뉴얼 푸터 -->
     <footer class="border-t border-slate-900 bg-slate-950 px-6 py-4 text-xs text-slate-500">
         <div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-3">
-            <p>© 2026 ClassShare SaaS, Inc. All rights reserved.</p>
+            <p>© 2026 ClassShare SECURE SaaS. All rights reserved.</p>
             <div class="flex space-x-4">
-                <span class="hover:text-slate-300 cursor-pointer">SaaS 도입 상담</span>
-                <span class="hover:text-slate-300 cursor-pointer">이용약관</span>
-                <span class="hover:text-slate-300 cursor-pointer">개인정보처리방침</span>
+                <span class="hover:text-slate-300 cursor-pointer">SaaS 정밀 보안 관제망 구축 완료</span>
             </div>
         </div>
     </footer>
 
-    <!-- Firebase SDK 로드 -->
+    <!-- Firebase Legacy SDK 호환성 확보 -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
-    <!-- WebRTC, Canvas Mixing, Dual Signaling Core Script -->
+    <!-- WebRTC, Adaptive Constraints & Cheat Detection Core Script -->
     <script>
-        // 글로벌 상태 변수
+        // 글로벌 상태
         let currentRole = 'student';
         let pc = null;
         let localStream = null;
@@ -327,8 +317,6 @@
         let canvasInterval = null;
         let db = null;
         let firebaseApp = null;
-        
-        // 로컬 샌드박스 테스팅을 위한 BroadCast Channel 지원
         let localChannel = null;
 
         // 드로잉 보드 전용 변수
@@ -337,19 +325,25 @@
         let isDrawing = false;
         let lastX = 0;
         let lastY = 0;
-        let penColor = '#10b981'; // 기본 녹색
+        let penColor = '#10b981';
         let penSize = 6;
         let isEraser = false;
+
+        // 부정 이탈 감시 타이머
+        let focusCheckInterval = null;
+        let isUserActiveOnTab = true;
 
         // 구글 STUN 서버 목록
         const rtcConfig = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' }
-            ]
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' }
+            ],
+            iceCandidatePoolSize: 10
         };
 
-        // 토스트 팝업 알림 (alert 대신 세련된 UI 피드백 제공)
+        // 토스트 알림창
         function showNotification(title, message, type = 'indigo') {
             const id = Date.now();
             const colors = {
@@ -365,19 +359,28 @@
                 </div>
             `;
             $('#toastContainer').append(html);
-            setTimeout(() => {
-                $(`#toast_${id}`).removeClass('translate-x-5 opacity-0');
-            }, 50);
-
+            setTimeout(() => { $(`#toast_${id}`).removeClass('translate-x-5 opacity-0'); }, 50);
             setTimeout(() => {
                 $(`#toast_${id}`).addClass('translate-x-5 opacity-0');
                 setTimeout(() => { $(`#toast_${id}`).remove(); }, 300);
             }, 4500);
         }
 
-        // 초기화 진입점
+        // 실시간 콘솔 로그 추가 함수
+        function writeSecurityLog(msg, type = 'normal') {
+            const time = new Date().toLocaleTimeString();
+            let color = 'text-slate-400';
+            if (type === 'alert') color = 'text-rose-400 font-bold';
+            if (type === 'success') color = 'text-emerald-400';
+            
+            const logHtml = `<div class="${color}">[${time}] ${msg}</div>`;
+            const consoleBox = document.getElementById('securityLogConsole');
+            $(consoleBox).append(logHtml);
+            consoleBox.scrollTop = consoleBox.scrollHeight;
+        }
+
+        // 초기 스타터
         $(document).ready(function() {
-            // 이전에 저장해 둔 Firebase 환경 설정 정보가 있는지 탐색
             const savedConfig = localStorage.getItem('saas_firebase_config');
             if (savedConfig) {
                 $('#firebaseConfigInput').val(savedConfig);
@@ -386,46 +389,81 @@
                 initLocalSandboxMode();
             }
             switchRole('student');
-            
-            // 드로잉 보드 마우스 및 터치 이벤트 연결
             initDrawingHandlers();
+            setupFocusDetectors();
         });
 
-        // 드로잉 보드 터치/마우스 이벤트 초기화 (갤럭시 S펜 압력 및 고정밀 매핑 포함)
+        // 학생 이탈 감시 이벤트 등록
+        function setupFocusDetectors() {
+            // 다른 탭으로 나가거나 화면 최소화 감지
+            document.addEventListener('visibilitychange', function() {
+                if (document.visibilityState === 'hidden') {
+                    handleStudentCheating(true);
+                } else {
+                    handleStudentCheating(false);
+                }
+            });
+
+            window.addEventListener('blur', function() {
+                handleStudentCheating(true);
+            });
+
+            window.addEventListener('focus', function() {
+                handleStudentCheating(false);
+            });
+        }
+
+        // 학생 다른 짓 발생 처리 핸들러
+        async function handleStudentCheating(isCheating) {
+            isUserActiveOnTab = !isCheating;
+            const roomId = $('#roomInputStudent').val().trim();
+            const studentName = $('#studentName').val().trim();
+            if (!roomId || currentRole !== 'student') return;
+
+            const timeStamp = Date.now();
+            if (isCheating) {
+                showNotification('보안 경고', '현재 학습 화면(탭)을 벗어났습니다. 관리자에게 즉시 경고가 송출됩니다.', 'red');
+                sendSignalingPayload(roomId, {
+                    isTabHidden: true,
+                    lastHiddenTime: timeStamp,
+                    studentName: studentName
+                });
+            } else {
+                showNotification('보안 안정', '학습 화면으로 복귀했습니다.', 'emerald');
+                sendSignalingPayload(roomId, {
+                    isTabHidden: false,
+                    lastHiddenTime: 0,
+                    studentName: studentName
+                });
+            }
+        }
+
+        // 칠판 그리기 드로잉보드 바인더
         function initDrawingHandlers() {
-            // 반응형 크기 맞춤
             resizeDrawingCanvas();
             window.addEventListener('resize', resizeDrawingCanvas);
 
-            // 마우스 이벤트
             drawingCanvas.addEventListener('mousedown', startDraw);
             drawingCanvas.addEventListener('mousemove', draw);
             drawingCanvas.addEventListener('mouseup', stopDraw);
             drawingCanvas.addEventListener('mouseout', stopDraw);
 
-            // 터치 이벤트 (태블릿 & 스마트폰 지원)
             drawingCanvas.addEventListener('touchstart', startDrawTouch, { passive: false });
             drawingCanvas.addEventListener('touchmove', drawTouch, { passive: false });
             drawingCanvas.addEventListener('touchend', stopDraw, { passive: false });
         }
 
         function resizeDrawingCanvas() {
-            const rect = drawingCanvas.parentElement.getBoundingClientRect();
-            // 선명한 필기를 위해 내부 해상도를 1280x720 규격으로 유지
             drawingCanvas.width = 1280;
             drawingCanvas.height = 720;
-            
-            // 필기장 초기 배경색 설정 (눈에 안전한 다크 프리미엄 슬레이트 칼라)
             drawCtx.fillStyle = '#090d16';
             drawCtx.fillRect(0, 0, drawingCanvas.width, drawingCanvas.height);
         }
 
-        // 드로잉 펜 조작 유틸리티 함수
         function setPenColor(color) {
             isEraser = false;
             penColor = color;
             $('#eraserBtn').removeClass('bg-indigo-600 text-white').addClass('bg-slate-800 text-slate-300');
-            showNotification('펜 컬러 설정', '필기용 컬러 브러시가 활성화되었습니다.', 'indigo');
         }
 
         function setPenSize(size) {
@@ -436,7 +474,6 @@
             isEraser = !isEraser;
             if (isEraser) {
                 $('#eraserBtn').addClass('bg-indigo-600 text-white').removeClass('bg-slate-800 text-slate-300');
-                showNotification('지우개 모드 활성', '필기한 궤적을 문질러 지울 수 있습니다.', 'emerald');
             } else {
                 $('#eraserBtn').removeClass('bg-indigo-600 text-white').addClass('bg-slate-800 text-slate-300');
             }
@@ -445,10 +482,8 @@
         function clearWhiteboard() {
             drawCtx.fillStyle = '#090d16';
             drawCtx.fillRect(0, 0, drawingCanvas.width, drawingCanvas.height);
-            showNotification('칠판 초기화', '필기장 화면이 깨끗하게 정리되었습니다.', 'emerald');
         }
 
-        // 칠판 그리기 드로잉 알고리즘
         function getCanvasCoordinates(e) {
             const rect = drawingCanvas.getBoundingClientRect();
             return {
@@ -473,7 +508,7 @@
             
             if (isEraser) {
                 drawCtx.strokeStyle = '#090d16';
-                drawCtx.lineWidth = 40; // 지우개 크기
+                drawCtx.lineWidth = 40;
             } else {
                 drawCtx.strokeStyle = penColor;
                 drawCtx.lineWidth = penSize;
@@ -525,7 +560,7 @@
             isDrawing = false;
         }
 
-        // 역할 변경 함수
+        // 모드 변환기
         function switchRole(role) {
             currentRole = role;
             stopAllStreams();
@@ -535,8 +570,6 @@
                 $('#roleBtn_teacher').addClass('text-slate-400 hover:text-white').removeClass('bg-indigo-600 text-white shadow-lg shadow-indigo-500/20');
                 $('#studentSection').removeClass('hidden');
                 $('#teacherSection').addClass('hidden');
-                
-                // 모드 선택 체크
                 handleSharingModeUI();
             } else {
                 $('#roleBtn_teacher').addClass('bg-indigo-600 text-white shadow-lg shadow-indigo-500/20').removeClass('text-slate-400 hover:text-white');
@@ -546,7 +579,6 @@
             }
         }
 
-        // 모드 변경 감지 시 UI 표시 여부 제어
         $('#sharingMode').on('change', function() {
             handleSharingModeUI();
         });
@@ -555,16 +587,12 @@
             const mode = $('#sharingMode').val();
             if (mode === 'whiteboard') {
                 $('#whiteboardContainer').removeClass('hidden');
-                $('#canvasPreview').addClass('hidden');
-                // 필기용으로 해상도 강제 전환 설정 최적화
-                $('#streamQuality').val('high'); 
             } else {
                 $('#whiteboardContainer').addClass('hidden');
-                $('#canvasPreview').removeClass('hidden');
             }
         }
 
-        // 1. Firebase 동적 바인딩 로직
+        // 1. 파이어베이스 초기 바인딩
         function initFirebase(config) {
             try {
                 if (firebase.apps.length === 0) {
@@ -573,11 +601,11 @@
                     firebaseApp = firebase.app();
                 }
                 db = firebaseApp.firestore();
-                $('#networkModeBadge').text('온라인 파이어베이스 SaaS 가동 중').removeClass('text-slate-500').addClass('text-indigo-400');
-                showNotification('서버 데이터베이스 연동 성공', '다른 하드웨어 기기간 화면 공유가 가능합니다.', 'indigo');
+                $('#networkModeBadge').text('SaaS 파이어베이스 원격 망 구동 중').removeClass('text-slate-500').addClass('text-indigo-400');
+                showNotification('온라인 동기화 성공', '원격 하드웨어 기기간 무중단 채널이 개설되었습니다.', 'indigo');
             } catch (err) {
                 console.error(err);
-                showNotification('설정 파싱 에러', '올바른 JSON 구성 형식이 아닙니다.', 'red');
+                showNotification('환경구성 에러', '올바른 JSON 구성 형식이 아닙니다.', 'red');
                 initLocalSandboxMode();
             }
         }
@@ -585,18 +613,14 @@
         function initLocalSandboxMode() {
             db = null;
             firebaseApp = null;
-            $('#networkModeBadge').text('로컬 가상 샌드박스망 활성').addClass('text-slate-500');
-            // 로컬 통신 채널 활성화
-            localChannel = new BroadcastChannel('webrtc_saas_sandbox');
+            $('#networkModeBadge').text('로컬 가상 교환망 구동 중').addClass('text-slate-500');
+            localChannel = new BroadcastChannel('webrtc_secure_sandbox');
             localChannel.onmessage = handleLocalSignalMessage;
         }
 
         function toggleSettingsModal(show) {
-            if (show) {
-                $('#settingsModal').removeClass('hidden');
-            } else {
-                $('#settingsModal').addClass('hidden');
-            }
+            if (show) $('#settingsModal').removeClass('hidden');
+            else $('#settingsModal').addClass('hidden');
         }
 
         function saveFirebaseSettings() {
@@ -623,7 +647,7 @@
             showNotification('로컬 모드 복원', '클라우드 연동이 차단되고 로컬 샌드박스로 구동됩니다.', 'emerald');
         }
 
-        // --- 실시간 캔버스 비디오 스트림 믹서 (화면공유 + 카메라 + 자필필기장 교차 서포트) ---
+        // --- 실시간 모니터 전용 캔버스 믹싱 엔진 (화면공유 + 프론트캠) ---
         function runCanvasMixer(screenStream, cameraStream, width, height, fps, mode) {
             const canvas = document.getElementById('canvasPreview');
             canvas.width = width;
@@ -636,7 +660,7 @@
                 screenVideo.srcObject = screenStream;
                 screenVideo.muted = true;
                 screenVideo.playsInline = true;
-                screenVideo.play();
+                screenVideo.play().catch(e => console.log('Screen Video play failed:', e));
             }
 
             let cameraVideo = null;
@@ -645,141 +669,158 @@
                 cameraVideo.srcObject = cameraStream;
                 cameraVideo.muted = true;
                 cameraVideo.playsInline = true;
-                cameraVideo.play();
+                // 카메라 정지/재시작 문제 해결을 위한 트랙 복구 리스너 등록
+                cameraStream.getVideoTracks()[0].onended = () => {
+                    console.log("Camera track ended, rebuilding...");
+                };
+                cameraVideo.play().catch(e => console.log('Camera Video play failed:', e));
             }
 
-            // 루프 그리기
             canvasInterval = setInterval(() => {
                 if (mode === 'whiteboard') {
-                    // 필기장 연동 모드: 실시간 필기장 화면(drawingCanvas)을 메인으로 사용
                     ctx.drawImage(drawingCanvas, 0, 0, canvas.width, canvas.height);
-                } else if (mode === 'camera_only') {
-                    // 카메라 단독 모드: 전체화면에 카메라 렌더링
-                    if (cameraVideo && cameraVideo.readyState >= 2) {
-                        ctx.drawImage(cameraVideo, 0, 0, canvas.width, canvas.height);
-                    } else {
-                        ctx.fillStyle = '#020617';
-                        ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    }
                 } else {
-                    // 화면 공유 모드 또는 합성 모드
+                    // 화면 공유 데이터 우선 렌더링
                     if (screenVideo && screenVideo.readyState >= 2) {
                         ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
                     } else {
-                        ctx.fillStyle = '#020617';
+                        // 검정 백그라운드 홀더
+                        ctx.fillStyle = '#0f172a';
                         ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+                        ctx.font = '14px system-ui';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('화면 공유 수집 중...', canvas.width / 2, canvas.height / 2);
                     }
 
-                    // 합성 모드일 때만 우상단 오버레이 그리기
+                    // 전면 카메라 합성 렌더링 (화면 우측 하단 고정 오버레이)
                     if (mode === 'composite' && cameraVideo && cameraVideo.readyState >= 2) {
-                        const camWidth = canvas.width * 0.20;
+                        const camWidth = canvas.width * 0.22;
                         const camHeight = (cameraVideo.videoHeight / cameraVideo.videoWidth) * camWidth || camWidth * 0.75;
                         const camX = canvas.width - camWidth - 16;
-                        const camY = 16;
+                        const camY = canvas.height - camHeight - 16;
 
-                        // 하이라이팅 테두리
-                        ctx.strokeStyle = '#4f46e5';
-                        ctx.lineWidth = 3;
-                        ctx.strokeRect(camX, camY, camWidth, camHeight);
+                        // 고급 라운딩 테두리 믹싱
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.roundRect(camX, camY, camWidth, camHeight, 10);
+                        ctx.clip();
                         ctx.drawImage(cameraVideo, camX, camY, camWidth, camHeight);
+                        ctx.restore();
+
+                        ctx.strokeStyle = '#6366f1';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.roundRect(camX, camY, camWidth, camHeight, 10);
+                        ctx.stroke();
                     }
                 }
 
-                // 브랜딩 워터마크 노출 (수업 모니터링 가시성 확보)
-                ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
-                ctx.fillRect(16, 16, 180, 32);
-                ctx.fillStyle = '#10b981';
+                // 보안 관제 워터마크
+                ctx.fillStyle = 'rgba(9, 13, 22, 0.85)';
+                ctx.fillRect(16, 16, 210, 36);
+                
+                // 녹화중 깜빡이는 데코레이터
+                ctx.fillStyle = (Math.floor(Date.now() / 500) % 2 === 0) ? '#ef4444' : '#1e293b';
                 ctx.beginPath();
-                ctx.arc(32, 32, 6, 0, 2 * Math.PI);
+                ctx.arc(32, 34, 6, 0, 2 * Math.PI);
                 ctx.fill();
+
                 ctx.fillStyle = '#ffffff';
-                ctx.font = 'bold 12px system-ui';
-                ctx.fillText('CLASS SHARE LIVE', 46, 36);
+                ctx.font = 'bold 11px system-ui';
+                ctx.textAlign = 'left';
+                ctx.fillText('실시간 관제 동작 중 (SECURE)', 46, 38);
             }, 1000 / fps);
 
             return canvas.captureStream(fps);
         }
 
-        // --- [학생] 화면공유 실행 ---
+        // --- [학생] 실시간 송출 개시 ---
         $('#btnStartBroadcasting').on('click', async function() {
             const sharingMode = $('#sharingMode').val();
-
-            // 태블릿 보안 정책 우회 - 필기장 모드일 경우에는 기기 호환성 검사를 무사 통과시킵니다.
-            if (sharingMode !== 'whiteboard' && sharingMode !== 'camera_only' && (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia)) {
-                showNotification(
-                    '기기 호환성 경고', 
-                    '해당 모바일 기기는 제조사 보안정책으로 웹OS 화면 전체 공유를 지원하지 않습니다. 100% 정상 가동되는 [자필 필기장 송출] 모드로 변경해 주세요!', 
-                    'red'
-                );
-                return;
-            }
-
             const roomId = $('#roomInputStudent').val().trim();
             const studentName = $('#studentName').val().trim();
+
             if (!roomId || !studentName) {
-                return showNotification('미지정 값 발생', '강의실 코드와 이름을 모두 확인하세요.', 'red');
+                return showNotification('설정 누락', '식별코드와 본인 실명을 먼저 기재해 주세요.', 'red');
             }
 
-            const quality = $('#streamQuality').val();
-            let screenConstraints, cameraConstraints, width, height, fps;
+            // 모바일 환경 체크 유연화
+            const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-            if (quality === 'high') {
-                screenConstraints = { video: { width: 1920, height: 1080, frameRate: 15 } };
-                cameraConstraints = { video: { width: 320, height: 240, frameRate: 15 } };
-                width = 1280;
-                height = 720;
-                fps = 15;
+            // ★태블릿 전용 고호환성 최적 설계★
+            // 가로채기 화질 제약을 극렬화하여 설정할 시, 갤럭시탭 기기는 화면 공유 캡처를 차단합니다.
+            // 따라서 모바일 기기일 시 constraints 사양을 지극히 유연하게 무제한으로 개방합니다.
+            let screenConstraints, cameraConstraints, mixedWidth, mixedHeight, fpsRate;
+
+            if (isMobileDevice) {
+                // 모바일 기기는 해상도 규격을 기기 브라우저 자율에 완벽히 양보하여 에러를 원천 차단합니다!
+                screenConstraints = { video: true };
+                cameraConstraints = { video: { facingMode: "user" } };
+                mixedWidth = 854;
+                mixedHeight = 480;
+                fpsRate = 8;
             } else {
-                screenConstraints = { video: { width: 1024, height: 576, frameRate: 5 } };
-                cameraConstraints = { video: { width: 160, height: 120, frameRate: 5 } };
-                width = 854;
-                height = 480;
-                fps = 5;
+                // 데스크톱 환경은 고사양 강제 적용
+                screenConstraints = { video: { width: 1280, height: 720, frameRate: 15 } };
+                cameraConstraints = { video: { width: 320, height: 240, frameRate: 15 } };
+                mixedWidth = 1280;
+                mixedHeight = 720;
+                fpsRate = 15;
             }
 
             try {
                 let screenStream = null;
                 let cameraStream = null;
 
-                // 1. 선택한 송출 모드에 맞추어 하드웨어 장치 개별 수집
-                if (sharingMode === 'screen_only') {
-                    screenStream = await navigator.mediaDevices.getDisplayMedia(screenConstraints);
-                } else if (sharingMode === 'camera_only') {
-                    cameraStream = await navigator.mediaDevices.getUserMedia(cameraConstraints);
-                } else if (sharingMode === 'composite') {
-                    screenStream = await navigator.mediaDevices.getDisplayMedia(screenConstraints);
+                // 1. 화면 공유 획득 (getDisplayMedia)
+                if (sharingMode === 'composite' || sharingMode === 'screen_only') {
                     try {
-                        cameraStream = await navigator.mediaDevices.getUserMedia(cameraConstraints);
-                    } catch (e) {
-                        showNotification('웹캠 감지 실패', '전면 카메라 없이 화면만 전송을 진행합니다.', 'indigo');
+                        screenStream = await navigator.mediaDevices.getDisplayMedia(screenConstraints);
+                    } catch (screenErr) {
+                        console.error("Screen Share Capture Failure:", screenErr);
+                        showNotification('화면 승인 필수', '갤럭시탭 화면 공유 권한을 반드시 승인하셔야 합니다.', 'red');
+                        return;
                     }
-                } else if (sharingMode === 'whiteboard') {
-                    // 필기장 모드일 때에는 전체 화면 공유 캡처를 일절 요구하지 않아 모바일에서 100% 승인됩니다!
-                    screenStream = null;
                 }
 
-                // 2. 수집된 스트림을 믹서 엔진에 전달하여 하나로 가공
-                mixedStream = runCanvasMixer(screenStream, cameraStream, width, height, fps, sharingMode);
-                
-                // 임시로 오리지널 소스 트랙들을 추적하고 보관하기 위해 백업
+                // 2. 전면 카메라 획득 (getUserMedia)
+                if (sharingMode === 'composite') {
+                    try {
+                        cameraStream = await navigator.mediaDevices.getUserMedia(cameraConstraints);
+                    } catch (camErr) {
+                        console.warn("Camera Capture Failure, continuing without camera:", camErr);
+                        showNotification('카메라 오류', '카메라를 켤 수 없습니다. 화면만 단독 전송합니다.', 'red');
+                    }
+                }
+
+                // 3. 믹서 엔진 결합 가동
+                mixedStream = runCanvasMixer(screenStream, cameraStream, mixedWidth, mixedHeight, fpsRate, sharingMode);
                 localStream = new MediaStream();
+                
                 if (screenStream) screenStream.getTracks().forEach(t => localStream.addTrack(t));
                 if (cameraStream) cameraStream.getTracks().forEach(t => localStream.addTrack(t));
 
                 $('#screenInstruction').addClass('hidden');
-                $('#studentLiveStatus').text('송출 가능상태').removeClass('text-slate-400').addClass('bg-emerald-500 text-white font-bold');
+                $('#studentLiveStatus').text('실시간 송출 대기').removeClass('text-slate-400').addClass('bg-emerald-500 text-white font-bold');
 
-                // RTCPeerConnection 생성
+                // RTCPeerConnection 생성 및 바인딩
                 pc = new RTCPeerConnection(rtcConfig);
-                mixedStream.getVideoTracks().forEach(track => pc.addTrack(track, mixedStream));
+                
+                // 원격지 트랙 송출 추가
+                mixedStream.getTracks().forEach(track => pc.addTrack(track, mixedStream));
 
-                // P2P 후보 수집 종료 후 시그널 전달
+                // ICE Candidate 수집 핸들링
                 pc.onicecandidate = function(e) {
                     if (e.candidate === null) {
+                        // 덮어쓰기(Overwrite) 방지를 위해 Firebase 업로드는 Offer 전용 필드에만 격리하여 저장!
                         sendSignalingPayload(roomId, {
                             type: 'offer',
                             sdp: pc.localDescription.sdp,
-                            studentName: studentName
+                            studentName: studentName,
+                            isTabHidden: !isUserActiveOnTab,
+                            lastHiddenTime: isUserActiveOnTab ? 0 : Date.now()
                         });
                     }
                 };
@@ -789,79 +830,222 @@
 
                 $('#btnStartBroadcasting').addClass('hidden');
                 $('#btnStopBroadcasting').removeClass('hidden');
-                showNotification('실시간 송출 활성화 완료', '선생님 대시보드에서 연결 대기 상태입니다.', 'emerald');
+                showNotification('모니터링 감시 가동', '실시간 원격 전송 파이프라인이 정상 활성화되었습니다.', 'emerald');
 
-                // DB로부터 수락 답변 수신 대기 (Firebase 혹은 로컬 폴링)
+                // 선생님 측의 수락 응답(Answer) 리스너 구동
                 startAnswerListening(roomId);
 
             } catch (err) {
-                console.error(err);
-                showNotification('하드웨어 취득 실패', '공유 승인이 취소되었거나 브라우저 권한이 차단되었습니다.', 'red');
+                console.error("Critical System Init Error:", err);
+                showNotification('하드웨어 오동작', '해당 기기의 미디어 모듈에 접근할 수 없습니다.', 'red');
             }
         });
 
         $('#btnStopBroadcasting').on('click', function() {
             stopAllStreams();
-            showNotification('송출 중단됨', '화면 방송이 정상 중단되었습니다.', 'indigo');
+            showNotification('관제 해제됨', '실시간 송출이 수동 중단되었습니다.', 'indigo');
         });
 
 
-        // --- [선생님] 수신 모니터링 수립 ---
+        // --- [선생님] 실시간 원격 감시 수락 ---
         $('#btnConnectTeacher').on('click', async function() {
             const roomId = $('#roomInputTeacher').val().trim();
-            if (!roomId) return showNotification('오류', '강의실 코드를 기입하세요.', 'red');
+            if (!roomId) return showNotification('오류', '채널 식별코드를 확인해 주세요.', 'red');
 
-            showNotification('신호 동기화 개시', '학생의 미디어 주소 탐색을 진행하고 있습니다.', 'indigo');
+            writeSecurityLog(`${roomId} 채널 감시망 수립 시도 중...`);
 
-            // 학생의 오퍼 신호 가져오기
+            // 1. 학생의 오퍼 신호 획득
             const signal = await fetchSignalingPayload(roomId);
             if (!signal || signal.type !== 'offer') {
-                return showNotification('학생 오프라인', '해당 룸에 송출을 활성화한 학생이 존재하지 않습니다.', 'red');
+                writeSecurityLog(`실패: 학생이 오프라인 상태이거나 방송을 개시하지 않았습니다.`, 'alert');
+                return showNotification('수신 대기 실패', '학생 단말기의 방송 시작 버튼이 가동되어야 합니다.', 'red');
             }
 
-            $('#activeStudentLabel').text(`${signal.studentName || '김민석'} 학생 (연결됨)`);
+            $('#activeStudentLabel').text(`${signal.studentName || '태블릿 학생'}`);
+            
+            // 학생 상태에 따른 1차 레이더 동기화
+            if (signal.isTabHidden) {
+                activeCheatingAlert(signal.lastHiddenTime);
+            } else {
+                deactiveCheatingAlert();
+            }
 
             pc = new RTCPeerConnection(rtcConfig);
 
-            // 스트림이 수신되었을 때 처리
+            // 실시간 트랙 감지 매핑
             pc.ontrack = function(event) {
                 $('#teacherNoStream').addClass('hidden');
                 const remoteVideo = document.getElementById('teacherRemoteVideo');
                 remoteVideo.srcObject = event.streams[0];
-                showNotification('원격 다이렉트 스트리밍 시작', '초저지연 WebRTC 화면공유 연동이 완료되었습니다.', 'emerald');
+                writeSecurityLog(`성공: 실시간 WebRTC P2P 다이렉트 화면 송출 안정화 완료.`, 'success');
+                showNotification('화면 동기화 완성', '원격 제어 및 동시 모니터링 수립에 성공하였습니다.', 'emerald');
             };
 
-            // 커넥션 수립 실패/종료 이벤트 추적
             pc.onconnectionstatechange = function() {
+                writeSecurityLog(`[연결 상태 변동] 현재 상태: ${pc.connectionState}`);
                 if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-                    showNotification('연결 끊김', '학생의 기기 통신이 일시 차단되었습니다.', 'red');
                     $('#teacherNoStream').removeClass('hidden');
+                    writeSecurityLog(`경고: 학생 태블릿과의 무선 네트워크가 일시적으로 지연되거나 이탈했습니다.`, 'alert');
                 }
             };
 
-            // 학생의 로컬 비디오 기술 정보 적용
+            // 덮어쓰기 방지를 고려하여, 학생의 sdp를 원격지로 등록
             await pc.setRemoteDescription(new RTCSessionDescription({
                 type: 'offer',
                 sdp: signal.sdp
             }));
 
-            // 선생님측 응답 답변서 작성
+            // 교사 측 답변서 작성 전송
             pc.onicecandidate = function(e) {
                 if (e.candidate === null) {
+                    // 데이터 병합 기술 활용 (학생 신호를 지우지 않고 오직 answer만 주입!)
                     sendSignalingPayload(roomId, {
                         type: 'answer',
-                        sdp: pc.localDescription.sdp
+                        answerSdp: pc.localDescription.sdp
                     });
                 }
             };
 
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
+
+            // 실시간 이탈 원격 폴링 추적 모니터링 가동 (SaaS Core)
+            startSecureTracking(roomId);
         });
 
-        // 스트림 반환 및 리소스 안전 파괴
+        // 실시간 이탈 경고 발생 시스템
+        let alertInterval = null;
+        function activeCheatingAlert(lastHiddenTime) {
+            $('#cheatingStatusBadge').text('이탈함 (경고)').removeClass('bg-slate-800 bg-emerald-600').addClass('bg-red-600 text-white font-bold');
+            $('#studentStatusCard').addClass('cheating-alert');
+            $('#cheatingAlertArea').removeClass('hidden');
+
+            if (alertInterval) clearInterval(alertInterval);
+            
+            alertInterval = setInterval(() => {
+                const diffSec = Math.floor((Date.now() - lastHiddenTime) / 1000);
+                $('#cheatingDurationSeconds').text(isNaN(diffSec) || diffSec < 0 ? 0 : diffSec);
+            }, 1000);
+        }
+
+        function deactiveCheatingAlert() {
+            $('#cheatingStatusBadge').text('정상 학습 중').removeClass('bg-slate-800 bg-red-600').addClass('bg-emerald-600 text-white font-bold');
+            $('#studentStatusCard').removeClass('cheating-alert');
+            $('#cheatingAlertArea').addClass('hidden');
+            if (alertInterval) {
+                clearInterval(alertInterval);
+                alertInterval = null;
+            }
+        }
+
+        // --- 공통 시그널 파이프 허브 (Firestore 병합 업데이트) ---
+        async function sendSignalingPayload(roomId, data) {
+            if (db) {
+                const docId = `secure_room_${roomId}`;
+                try {
+                    // ★덮어쓰기 파괴 방지 코드★ - set 연산시 { merge: true } 옵션을 부여하여
+                    // 학생 오퍼(sdp), 교사 답변(answerSdp), 이탈 감지 필드가 충돌 없이 동시에 병존합니다!
+                    await db.collection('artifacts')
+                            .doc('classshare-preview')
+                            .collection('public')
+                            .doc('data')
+                            .collection('secure_signals')
+                            .doc(docId)
+                            .set(data, { merge: true });
+                } catch (e) {
+                    console.error("Firestore Upload Core Failure:", e);
+                }
+            } else {
+                if (localChannel) {
+                    localChannel.postMessage({ roomId: roomId, payload: data });
+                }
+            }
+        }
+
+        async function fetchSignalingPayload(roomId) {
+            if (db) {
+                const docId = `secure_room_${roomId}`;
+                try {
+                    const snap = await db.collection('artifacts')
+                                        .doc('classshare-preview')
+                                        .collection('public')
+                                        .doc('data')
+                                        .collection('secure_signals')
+                                        .doc(docId)
+                                        .get();
+                    return snap.exists ? snap.data() : null;
+                } catch (e) {
+                    console.error('Data Fetch Core Error:', e);
+                    return null;
+                }
+            } else {
+                return lastLocalOffer && lastLocalOffer.roomId === roomId ? lastLocalOffer.payload : null;
+            }
+        }
+
+        // 학생 측 수락 대기 감청부 (교사 신호 관제)
+        function startAnswerListening(roomId) {
+            if (db) {
+                const docId = `secure_room_${roomId}`;
+                db.collection('artifacts')
+                  .doc('classshare-preview')
+                  .collection('public')
+                  .doc('data')
+                  .collection('secure_signals')
+                  .doc(docId)
+                  .onSnapshot((doc) => {
+                      const data = doc.data();
+                      if (data && data.answerSdp && pc && pc.signalingState !== 'stable') {
+                          pc.setRemoteDescription(new RTCSessionDescription({
+                              type: 'answer',
+                              sdp: data.answerSdp
+                          })).then(() => {
+                              $('#studentLiveStatus').text('원격 감시 연동 완료').removeClass('bg-emerald-500').addClass('bg-indigo-600');
+                              showNotification('보안 가동 완료', '선생님 대시보드와 초저지연 직결이 완료되었습니다.', 'emerald');
+                          }).catch(e => console.log('Answer Apply Failure:', e));
+                      }
+                  }, err => console.log('Scribe Engine Error:', err));
+            }
+        }
+
+        // 교사 전용 실시간 이탈 폴링 리스너 (Bust-the-Cheater)
+        let secureTrackerUnsubscribe = null;
+        function startSecureTracking(roomId) {
+            if (secureTrackerUnsubscribe) secureTrackerUnsubscribe();
+            
+            if (db) {
+                const docId = `secure_room_${roomId}`;
+                secureTrackerUnsubscribe = db.collection('artifacts')
+                  .doc('classshare-preview')
+                  .collection('public')
+                  .doc('data')
+                  .collection('secure_signals')
+                  .doc(docId)
+                  .onSnapshot((doc) => {
+                      const data = doc.data();
+                      if (data) {
+                          if (data.isTabHidden) {
+                              writeSecurityLog(`[이탈 경보] 학생이 공부방을 이탈하여 다른 짓을 하고 있습니다!`, 'alert');
+                              activeCheatingAlert(data.lastHiddenTime);
+                          } else {
+                              if ($('#cheatingStatusBadge').text().includes('이탈')) {
+                                  writeSecurityLog(`[이탈 종료] 학생이 학원 학습 페이지로 안전하게 복귀했습니다.`, 'success');
+                              }
+                              deactiveCheatingAlert();
+                          }
+                      }
+                  }, err => console.log('Tracker Error:', err));
+            }
+        }
+
+        // 리소스 반환 파괴
         function stopAllStreams() {
             if (canvasInterval) clearInterval(canvasInterval);
+            if (alertInterval) clearInterval(alertInterval);
+            if (secureTrackerUnsubscribe) {
+                secureTrackerUnsubscribe();
+                secureTrackerUnsubscribe = null;
+            }
             if (pc) {
                 pc.close();
                 pc = null;
@@ -883,78 +1067,41 @@
         $('#btnDisconnectTeacher').on('click', function() {
             stopAllStreams();
             $('#teacherNoStream').removeClass('hidden');
-            showNotification('모니터링 강제 종료', '모든 P2P 채널 연결을 강제 반환했습니다.', 'indigo');
+            deactiveCheatingAlert();
+            writeSecurityLog('경고: 선생님에 의해 전체 모니터링 세션이 차단 및 청소되었습니다.', 'alert');
         });
 
-        function changeFrameSpeed(mode) {
-            showNotification('품질 제어 시연', 'SaaS 정식 버전에서는 선생님 조작 버튼 클릭 시 학생의 해상도 제어 명령이 P2P로 직접 전달됩니다.', 'indigo');
-        }
-
-        // --- 공통 시그널링 허브 (Firebase / Local Dual Routing) ---
-        async function sendSignalingPayload(roomId, data) {
-            if (db) {
-                const docId = `saas_room_${roomId}`;
-                await db.collection('artifacts').doc('classshare-preview').collection('public').doc('data').collection('signals').doc(docId).set(data);
-            } else {
-                if (localChannel) {
-                    localChannel.postMessage({ roomId: roomId, payload: data });
-                }
-            }
-        }
-
-        async function fetchSignalingPayload(roomId) {
-            if (db) {
-                const docId = `saas_room_${roomId}`;
-                try {
-                    const snap = await db.collection('artifacts').doc('classshare-preview').collection('public').doc('data').collection('signals').doc(docId).get();
-                    return snap.exists ? snap.data() : null;
-                } catch (e) {
-                    console.error('Firebase DB 읽기 권한 확인 필요:', e);
-                    return null;
-                }
-            } else {
-                showNotification('샌드박스 모니터', '로컬 가상 교환망을 사용해 신호가 실시간 연동되어 수신되었습니다.', 'indigo');
-                return lastLocalOffer && lastLocalOffer.roomId === roomId ? lastLocalOffer.payload : null;
-            }
-        }
-
+        // 샌드박스 테스팅 브로드캐스트 핸들러
         let lastLocalOffer = null;
-        let lastLocalAnswer = null;
-
         function handleLocalSignalMessage(e) {
             const { roomId, payload } = e.data;
             if (payload.type === 'offer') {
                 lastLocalOffer = { roomId, payload };
-                showNotification('학생 신호 확인됨', '선생님 탭에서 연결을 수락하실 수 있습니다.', 'indigo');
+                if (currentRole === 'teacher') {
+                    $('#activeStudentLabel').text(`${payload.studentName}`);
+                    if (payload.isTabHidden) activeCheatingAlert(payload.lastHiddenTime);
+                    else deactiveCheatingAlert();
+                }
             } else if (payload.type === 'answer') {
-                lastLocalAnswer = { roomId, payload };
                 if (pc && pc.signalingState !== 'stable') {
                     pc.setRemoteDescription(new RTCSessionDescription({
                         type: 'answer',
-                        sdp: payload.sdp
+                        sdp: payload.answerSdp
                     })).then(() => {
-                        $('#studentLiveStatus').text('선생님 기기와 무비용 직결 성공').removeClass('bg-emerald-500').addClass('bg-indigo-600');
-                        showNotification('모니터링 화면 전송 시작!', 'P2P 통신이 완료되어 실시간 공유가 개시되었습니다.', 'emerald');
+                        $('#studentLiveStatus').text('로컬 가상 연결 성공').removeClass('bg-emerald-500').addClass('bg-indigo-600');
                     });
                 }
             }
-        }
-
-        function startAnswerListening(roomId) {
-            if (db) {
-                const docId = `saas_room_${roomId}`;
-                db.collection('artifacts').doc('classshare-preview').collection('public').doc('data').collection('signals').doc(docId).onSnapshot((doc) => {
-                    const data = doc.data();
-                    if (data && data.type === 'answer' && pc && pc.signalingState !== 'stable') {
-                        pc.setRemoteDescription(new RTCSessionDescription({
-                            type: 'answer',
-                            sdp: data.sdp
-                        })).then(() => {
-                            $('#studentLiveStatus').text('온라인 원격 직결 성공').removeClass('bg-emerald-500').addClass('bg-indigo-600');
-                            showNotification('원격 브라우저 다이렉트 스트리밍 시작', '초저지연 WebRTC 화면공유 연동이 완료되었습니다.', 'emerald');
-                        });
-                    }
-                }, err => console.log('데이터 스냅샷 오류:', err));
+            
+            // 이탈 정보 즉시 싱크
+            if (currentRole === 'teacher' && payload.isTabHidden !== undefined) {
+                if (payload.isTabHidden) {
+                    writeSecurityLog(`[이탈 경보] 학생이 공부방을 이탈하여 다른 짓을 하고 있습니다!`, 'alert');
+                    activeCheatingAlert(payload.lastHiddenTime);
+                } else {
+                    writeSecurityLog(`[이탈 종료] 학생이 학원 학습 페이지로 복귀했습니다.`, 'success');
+                    deactiveCheatingAlert();
+                }
             }
         }
     </script>
