@@ -28,7 +28,6 @@
             touch-action: none;
             cursor: crosshair;
         }
-        /* 경고 및 알림 애니메이션 */
         @keyframes alert-pulse {
             0%, 100% { background-color: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.4); }
             50% { background-color: rgba(239, 68, 68, 0.3); border-color: rgba(239, 68, 68, 0.8); }
@@ -197,7 +196,7 @@
                     <div class="relative bg-slate-950 rounded-xl overflow-hidden aspect-video shadow-inner border border-slate-800 flex items-center justify-center">
                         <canvas id="canvasPreview" class="w-full h-full object-contain"></canvas>
                         
-                        <!-- 모바일/태블릿용 반응형 자필 드로잉보드 (화면 감시 외 서브 컴포넌트) -->
+                        <!-- 모바일/태블릿용 반응형 자필 드로잉보드 -->
                         <div id="whiteboardContainer" class="absolute inset-0 w-full h-full bg-slate-900 flex flex-col hidden">
                             <!-- 드로잉 펜 툴바 -->
                             <div class="bg-slate-950 border-b border-slate-800 p-2 flex items-center justify-between z-20">
@@ -392,7 +391,11 @@
         let canvasInterval = null;
         let db = null;
         let firebaseApp = null;
+        let currentUser = null; // Rule 3 준수용 유저 토큰 바인딩
         let localChannel = null;
+
+        // 환경 변수 설정
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'classshare-preview';
 
         // 원격 카메라 동적 바인딩 제어 플래그
         let isCameraEnabledLocal = true;
@@ -459,21 +462,81 @@
             }
         }
 
-        // 초기 스타터
+        // 초기 스타터 (Rule 3에 따라 파이어베이스 설정 자동 감지 및 즉시 바인딩 실행)
         $(document).ready(function() {
-            runDiagnostics(); // 시스템 자가진단 실행
-
-            const savedConfig = localStorage.getItem('saas_firebase_config');
-            if (savedConfig) {
-                $('#firebaseConfigInput').val(savedConfig);
-                initFirebase(JSON.parse(savedConfig));
-            } else {
-                initLocalSandboxMode();
-            }
+            autoInitFirebase();
             switchRole('student');
             initDrawingHandlers();
             setupFocusDetectors();
         });
+
+        // 파이어베이스 플랫폼 자동 연동 부 (SaaS 안정성 확보)
+        async function autoInitFirebase() {
+            let config = null;
+            
+            // 1. 시스템 환경 변수 config 우선 획득
+            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                try {
+                    config = JSON.parse(__firebase_config);
+                } catch(e) {
+                    console.error("환경 변수 Config 파싱 오류:", e);
+                }
+            }
+            
+            // 2. 없으면 로컬 스토리지에 저장해둔 값으로 폴백
+            if (!config) {
+                const savedConfig = localStorage.getItem('saas_firebase_config');
+                if (savedConfig) {
+                    try {
+                        config = JSON.parse(savedConfig);
+                    } catch(e) {}
+                }
+            }
+            
+            if (config) {
+                try {
+                    if (firebase.apps.length === 0) {
+                        firebaseApp = firebase.initializeApp(config);
+                    } else {
+                        firebaseApp = firebase.app();
+                    }
+                    db = firebaseApp.firestore();
+                    
+                    // Auth Rule 3 준수: 익명 인증을 선제적으로 완료한 후 유저 세션을 전역 획득
+                    let userCredential;
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        userCredential = await firebase.auth().signInWithCustomToken(__initial_auth_token);
+                    } else {
+                        userCredential = await firebase.auth().signInAnonymously();
+                    }
+                    currentUser = userCredential.user;
+
+                    $('#networkModeBadge').text('SaaS 파이어베이스 원격 망 구동 중').removeClass('text-slate-500').addClass('text-indigo-400');
+                    writeSecurityLog("파이어베이스 클라우드 인증 완료 (ID: " + currentUser.uid + ")", "success");
+                    
+                    if (currentRole === 'teacher') {
+                        startGlobalQueueListening();
+                    }
+                    runDiagnostics(); // 자가진단 수행
+                } catch (err) {
+                    console.error("Firebase Auth / Init Error:", err);
+                    writeSecurityLog("클라우드 인증 에러: " + err.message, "alert");
+                    initLocalSandboxMode();
+                }
+            } else {
+                initLocalSandboxMode();
+            }
+        }
+
+        function initLocalSandboxMode() {
+            db = null;
+            firebaseApp = null;
+            currentUser = null;
+            $('#networkModeBadge').text('로컬 가상 교환망 구동 중').addClass('text-slate-500');
+            localChannel = new BroadcastChannel('webrtc_secure_sandbox');
+            localChannel.onmessage = handleLocalSignalMessage;
+            runDiagnostics();
+        }
 
         // 태블릿 시스템 자가진단 수행 함수
         function runDiagnostics() {
@@ -666,6 +729,7 @@
             lastY = pos.y;
         }
 
+        // 마우스 업
         function stopDraw() {
             isDrawing = false;
         }
@@ -705,181 +769,7 @@
             }
         }
 
-        // 파이어베이스 초기 바인딩 및 인증 전제 가동
-        async function initFirebase(config) {
-            try {
-                if (firebase.apps.length === 0) {
-                    firebaseApp = firebase.initializeApp(config);
-                } else {
-                    firebaseApp = firebase.app();
-                }
-                
-                // Firestore 인스턴스 획득
-                db = firebaseApp.firestore();
-                
-                // Auth Rule 3 준수: Firestore 쿼리 실행 전 반드시 익명인증을 완료함
-                await firebase.auth().signInAnonymously();
-
-                $('#networkModeBadge').text('SaaS 파이어베이스 원격 망 구동 중').removeClass('text-slate-500').addClass('text-indigo-400');
-                showNotification('온라인 동기화 성공', '원격 하드웨어 기간의 무중단 양방향 교환 채널이 개설되었습니다.', 'indigo');
-                
-                if (currentRole === 'teacher') {
-                    startGlobalQueueListening();
-                }
-            } catch (err) {
-                console.error(err);
-                showNotification('클라우드 인증 에러', '올바른 구성 정보가 아니거나 파이어베이스 보안 승인에 실패했습니다.', 'red');
-                initLocalSandboxMode();
-            }
-        }
-
-        function initLocalSandboxMode() {
-            db = null;
-            firebaseApp = null;
-            $('#networkModeBadge').text('로컬 가상 교환망 구동 중').addClass('text-slate-500');
-            localChannel = new BroadcastChannel('webrtc_secure_sandbox');
-            localChannel.onmessage = handleLocalSignalMessage;
-        }
-
-        function toggleSettingsModal(show) {
-            if (show) $('#settingsModal').removeClass('hidden');
-            else $('#settingsModal').addClass('hidden');
-        }
-
-        function saveFirebaseSettings() {
-            const raw = $('#firebaseConfigInput').val().trim();
-            if (!raw) {
-                showNotification('오류', '설정 입력칸이 비어 있습니다.', 'red');
-                return;
-            }
-            try {
-                const parsed = JSON.parse(raw);
-                localStorage.setItem('saas_firebase_config', raw);
-                initFirebase(parsed);
-                toggleSettingsModal(false);
-            } catch (e) {
-                showNotification('설정 저장 실패', '올바른 JSON 양식을 준수해 주세요.', 'red');
-            }
-        }
-
-        function clearFirebaseSettings() {
-            localStorage.removeItem('saas_firebase_config');
-            $('#firebaseConfigInput').val('');
-            initLocalSandboxMode();
-            toggleSettingsModal(false);
-            showNotification('로컬 모드 복원', '클라우드 연동이 차단되고 로컬 샌드박스로 구동됩니다.', 'emerald');
-        }
-
-        // --- 실시간 모니터 전용 캔버스 믹싱 엔진 (모바일용 고호환 보정) ---
-        function runCanvasMixer(screenStream, cameraStream, width, height, fps, mode) {
-            const canvas = document.getElementById('canvasPreview');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-
-            let screenVideo = null;
-            if (screenStream) {
-                screenVideo = document.createElement('video');
-                screenVideo.srcObject = screenStream;
-                screenVideo.muted = true;
-                screenVideo.playsInline = true;
-                screenVideo.play().catch(e => console.log('Screen Video play failed:', e));
-            }
-
-            let cameraVideo = null;
-            if (cameraStream) {
-                cameraVideo = document.createElement('video');
-                cameraVideo.srcObject = cameraStream;
-                cameraVideo.muted = true;
-                cameraVideo.playsInline = true;
-                cameraVideo.play().catch(e => console.log('Camera Video play failed:', e));
-            }
-
-            canvasInterval = setInterval(() => {
-                if (mode === 'whiteboard') {
-                    ctx.drawImage(drawingCanvas, 0, 0, canvas.width, canvas.height);
-                } else if (mode === 'camera_only') {
-                    if (isCameraEnabledLocal && cameraVideo && cameraVideo.readyState >= 2) {
-                        ctx.drawImage(cameraVideo, 0, 0, canvas.width, canvas.height);
-                    } else {
-                        ctx.fillStyle = '#0b0f19';
-                        ctx.fillRect(0, 0, canvas.width, canvas.height);
-                        ctx.fillStyle = 'rgba(239, 68, 68, 0.8)';
-                        ctx.font = 'bold 16px system-ui';
-                        ctx.textAlign = 'center';
-                        ctx.fillText(isCameraEnabledLocal ? '카메라 연결 수집 중...' : '원격으로 카메라가 중단되었습니다', canvas.width / 2, canvas.height / 2);
-                    }
-                } else {
-                    if (screenVideo && screenVideo.readyState >= 2) {
-                        ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
-                    } else {
-                        ctx.fillStyle = '#0f172a';
-                        ctx.fillRect(0, 0, canvas.width, canvas.height);
-                        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-                        ctx.font = '14px system-ui';
-                        ctx.textAlign = 'center';
-                        ctx.fillText('공유 화면 데이터 처리 중...', canvas.width / 2, canvas.height / 2);
-                    }
-
-                    if (mode === 'composite' && cameraVideo && cameraVideo.readyState >= 2) {
-                        if (isCameraEnabledLocal) {
-                            const camWidth = canvas.width * 0.22;
-                            const camHeight = (cameraVideo.videoHeight / cameraVideo.videoWidth) * camWidth || camWidth * 0.75;
-                            const camX = canvas.width - camWidth - 16;
-                            const camY = canvas.height - camHeight - 16;
-
-                            ctx.save();
-                            ctx.beginPath();
-                            ctx.roundRect(camX, camY, camWidth, camHeight, 10);
-                            ctx.clip();
-                            ctx.drawImage(cameraVideo, camX, camY, camWidth, camHeight);
-                            ctx.restore();
-
-                            ctx.strokeStyle = '#6366f1';
-                            ctx.lineWidth = 2;
-                            ctx.beginPath();
-                            ctx.roundRect(camX, camY, camWidth, camHeight, 10);
-                            ctx.stroke();
-                        } else {
-                            const camWidth = canvas.width * 0.22;
-                            const camHeight = camWidth * 0.75;
-                            const camX = canvas.width - camWidth - 16;
-                            const camY = canvas.height - camHeight - 16;
-                            
-                            ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-                            ctx.beginPath();
-                            ctx.roundRect(camX, camY, camWidth, camHeight, 10);
-                            ctx.fill();
-                            ctx.strokeStyle = '#ef4444';
-                            ctx.lineWidth = 1;
-                            ctx.stroke();
-
-                            ctx.fillStyle = '#f87171';
-                            ctx.font = '10px system-ui';
-                            ctx.textAlign = 'center';
-                            ctx.fillText('카메라 꺼짐', camX + camWidth/2, camY + camHeight/2);
-                        }
-                    }
-                }
-
-                ctx.fillStyle = 'rgba(9, 13, 22, 0.85)';
-                ctx.fillRect(16, 16, 210, 36);
-                
-                ctx.fillStyle = (Math.floor(Date.now() / 500) % 2 === 0) ? '#ef4444' : '#1e293b';
-                ctx.beginPath();
-                ctx.arc(32, 34, 6, 0, 2 * Math.PI);
-                ctx.fill();
-
-                ctx.fillStyle = '#ffffff';
-                ctx.font = 'bold 11px system-ui';
-                ctx.textAlign = 'left';
-                ctx.fillText('실시간 관제 동작 중 (SECURE)', 46, 38);
-            }, 1000 / fps);
-
-            return canvas.captureStream(fps);
-        }
-
-        // --- [학생] 실시간 송출 개시 (★접속 시도 즉시 대기열 연동 펌웨어 탑재★) ---
+        // --- [학생] 실시간 송출 개시 (태블릿 스레드 차단 해결 버전) ---
         $('#btnStartBroadcasting').on('click', async function() {
             const sharingMode = $('#sharingMode').val();
             const roomId = $('#roomInputStudent').val().trim();
@@ -889,8 +779,51 @@
                 return showNotification('설정 누락', '식별코드와 본인 실명을 먼저 기재해 주세요.', 'red');
             }
 
-            // 원장님 요구 사항 핵심 구현: 승인 팝업이 뜨기도 전인 버튼 터치 소수점 단위 시점에 즉시 대기 신호 송출!
-            // 이로써 선생님 화면에 "홍길동 학생이 연결 요청 중..." 이 실시간으로 나타납니다.
+            // [태블릿 최우선 해결조치] 사용자 클릭 이벤트 동기 스레드 상태에서 미디어 스트림 획득을 최우선 실행!
+            let screenStream = null;
+            let cameraStream = null;
+            const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            
+            let screenConstraints = isMobileDevice ? { video: { displaySurface: "monitor" } } : { video: { width: 1280, height: 720, frameRate: 15 } };
+            let cameraConstraints = isMobileDevice ? { video: { facingMode: "user", width: { ideal: 320 }, height: { ideal: 240 } } } : { video: { width: 320, height: 240, frameRate: 15 } };
+            let mixedWidth = isMobileDevice ? 640 : 1280;
+            let mixedHeight = isMobileDevice ? 360 : 720;
+            let fpsRate = isMobileDevice ? 8 : 12;
+
+            try {
+                // 1. 화면 공유 획득 (비동기 데이터베이스 저장 코드보다 먼저 실행되어 브라우저 차단 우회)
+                if (sharingMode === 'composite' || sharingMode === 'screen_only') {
+                    if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+                        screenStream = await navigator.mediaDevices.getDisplayMedia(screenConstraints);
+                        screenStreamGlobal = screenStream;
+                    } else {
+                        throw new Error("태블릿/기기가 화면 공유 기능을 차단했거나 지원하지 않는 브라우저입니다.");
+                    }
+                }
+
+                // 2. 전면 카메라 획득
+                if (sharingMode === 'composite' || sharingMode === 'camera_only') {
+                    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                        cameraStream = await navigator.mediaDevices.getUserMedia(cameraConstraints);
+                        cameraStreamGlobal = cameraStream;
+                        isCameraEnabledLocal = true;
+                        $('#cameraStatusIndicator').text('카메라 실시간 작동 중').removeClass('text-red-400 bg-red-950/80').addClass('text-emerald-400 bg-emerald-950/80');
+                    }
+                }
+            } catch (mediaErr) {
+                console.error("미디어 트랙 수집 오류:", mediaErr);
+                showNotification('미디어 수집 실패', mediaErr.message || '권한 허가 거부 또는 미지원 브라우저입니다.', 'red');
+                
+                // 에러 발생 상태 데이터베이스 씽크
+                await sendSignalingPayload(roomId, {
+                    isWaiting: true,
+                    status: 'failed',
+                    errorMsg: mediaErr.message || '권한 거부'
+                });
+                return;
+            }
+
+            // 미디어가 완전 수집된 이후 클라우드 대기 신호(Connecting) 전송
             $('#studentLiveStatus').text('연결 시도 중...').removeClass('text-slate-400').addClass('bg-amber-500 text-white font-bold animate-pulse');
             await sendSignalingPayload(roomId, {
                 isWaiting: true,
@@ -901,75 +834,7 @@
                 cameraEnabled: true
             });
 
-            const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            
-            if (isMobileDevice && window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
-                showNotification(
-                    '자가진단 경고', 
-                    '태블릿 기기에서 화면 공유를 실행하려면 반드시 HTTPS 보안 주소로 접속해야 구글 화면 공유 선택창이 활성화됩니다.', 
-                    'red'
-                );
-            }
-
-            let screenConstraints, cameraConstraints, mixedWidth, mixedHeight, fpsRate;
-
-            if (isMobileDevice) {
-                screenConstraints = { video: { displaySurface: "monitor" } };
-                cameraConstraints = { video: { facingMode: "user", width: { ideal: 320 }, height: { ideal: 240 } } };
-                mixedWidth = 640;
-                mixedHeight = 360;
-                fpsRate = 8;
-            } else {
-                screenConstraints = { video: { width: 1280, height: 720, frameRate: 15 } };
-                cameraConstraints = { video: { width: 320, height: 240, frameRate: 15 } };
-                mixedWidth = 1280;
-                mixedHeight = 720;
-                fpsRate = 12;
-            }
-
             try {
-                let screenStream = null;
-                let cameraStream = null;
-
-                // 1. 화면 공유 획득 (getDisplayMedia)
-                if (sharingMode === 'composite' || sharingMode === 'screen_only') {
-                    try {
-                        screenStream = await navigator.mediaDevices.getDisplayMedia(screenConstraints);
-                        screenStreamGlobal = screenStream;
-                    } catch (screenErr) {
-                        console.error("Screen Share Capture Failure:", screenErr);
-                        
-                        // 화면 승인을 취소했거나 거절했을 때, 실패 상태를 선생님 화면에도 투명하게 싱크!
-                        await sendSignalingPayload(roomId, {
-                            status: 'failed',
-                            errorMsg: '화면 권한 거부됨'
-                        });
-
-                        showNotification(
-                            '화면 권한 기각', 
-                            '공유 시스템창에서 [지금 시작] 혹은 [전체화면 공유]를 승인해 주셔야 선생님께 화면이 전송됩니다.', 
-                            'red'
-                        );
-                        
-                        // 원복 처리
-                        $('#studentLiveStatus').text('오프라인').removeClass('bg-amber-500 animate-pulse text-white').addClass('text-slate-400');
-                        return;
-                    }
-                }
-
-                // 2. 전면 카메라 획득 (getUserMedia)
-                if (sharingMode === 'composite' || sharingMode === 'camera_only') {
-                    try {
-                        cameraStream = await navigator.mediaDevices.getUserMedia(cameraConstraints);
-                        cameraStreamGlobal = cameraStream;
-                        isCameraEnabledLocal = true;
-                        $('#cameraStatusIndicator').text('카메라 실시간 작동 중').removeClass('text-red-400 bg-red-950/80').addClass('text-emerald-400 bg-emerald-950/80');
-                    } catch (camErr) {
-                        console.warn("Camera Capture Failure:", camErr);
-                        showNotification('카메라 연동 보류', '카메라 하드웨어 권한이 거부되었거나 사용 중입니다.', 'indigo');
-                    }
-                }
-
                 // 3. 믹서 엔진 결합 가동
                 mixedStream = runCanvasMixer(screenStream, cameraStream, mixedWidth, mixedHeight, fpsRate, sharingMode);
                 localStream = new MediaStream();
@@ -983,15 +848,15 @@
                 // RTCPeerConnection 생성 및 바인딩
                 pc = new RTCPeerConnection(rtcConfig);
                 
-                // 믹스된 최종 관제 캔버스 트랙을 수혈
+                // 믹스된 최종 관제 캔버스 트랙 수혈
                 mixedStream.getTracks().forEach(track => pc.addTrack(track, mixedStream));
                 
-                // 선생님에게 다이렉트 디코딩용 순수 전면 카메라 트랙 직송출
+                // 디코딩 오버레이용 순수 카메라 트랙 추가송출
                 if (cameraStream) {
                     cameraStream.getVideoTracks().forEach(track => pc.addTrack(track, cameraStream));
                 }
 
-                // ICE Candidate 완료 후 완전한 Offer 신호 발송
+                // ICE Candidate 수립 완료 후 Offer 발송
                 pc.onicecandidate = function(e) {
                     if (e.candidate === null) {
                         sendSignalingPayload(roomId, {
@@ -1002,7 +867,7 @@
                             lastHiddenTime: isUserActiveOnTab ? 0 : Date.now(),
                             cameraEnabled: true,
                             isWaiting: true,
-                            status: 'broadcasting', // 상태 변경
+                            status: 'broadcasting',
                             timestamp: Date.now()
                         });
                         
@@ -1016,13 +881,13 @@
                 $('#btnStartBroadcasting').addClass('hidden');
                 $('#btnStopBroadcasting').removeClass('hidden');
 
-                // 선생님 측의 Answer 수락 리스너
+                // 선생님의 Answer 수락 감청 시작
                 startAnswerListening(roomId);
 
             } catch (err) {
-                console.error("Critical System Init Error:", err);
-                sendSignalingPayload(roomId, { status: 'failed', errorMsg: '시스템 예외 차단' });
-                showNotification('하드웨어 수집 실패', '지원되지 않는 기기 조건이거나 타 웹뷰앱 환경입니다.', 'red');
+                console.error("WebRTC 피어 구성 실패:", err);
+                sendSignalingPayload(roomId, { status: 'failed', errorMsg: '피어 구성 실패' });
+                showNotification('연결 구조 실패', 'WebRTC 채널을 개설하지 못했습니다.', 'red');
             }
         });
 
@@ -1039,16 +904,15 @@
             showNotification('관제 해제됨', '실시간 송출이 완전히 중단되었습니다.', 'indigo');
         });
 
-
-        // --- [선생님] 실시간 학생 대기 신호(onSnapshot) 정밀 감청 엔진 ---
+        // --- [선생님] 실시간 학생 대기 신호(onSnapshot) 감청 엔진 ---
         let globalQueueUnsubscribe = null;
         function startGlobalQueueListening() {
             if (globalQueueUnsubscribe) globalQueueUnsubscribe();
             
-            if (db) {
-                // Rule 1 적용된 정확한 Firestore 경로 바인딩
+            if (db && currentUser) {
+                // Rule 1 및 Rule 3가 완벽히 적용된 안전 경로 바인딩
                 globalQueueUnsubscribe = db.collection('artifacts')
-                    .doc('classshare-preview')
+                    .doc(appId)
                     .collection('public')
                     .doc('data')
                     .collection('secure_signals')
@@ -1065,7 +929,6 @@
                             if (data && data.isWaiting === true) {
                                 count++;
                                 
-                                // 대기 상태에 따른 실시간 배지 분기 렌더링
                                 let stateBadge = '';
                                 let cardBorder = 'border-slate-800 bg-slate-900/50';
                                 
@@ -1111,50 +974,86 @@
             }
         }
 
-        // 특정 대기열 학생 관제 연결 원클릭 완성부
         function acceptIncomingStudent(roomId) {
             $('#roomInputTeacher').val(roomId);
             $('#btnConnectTeacher').click();
         }
 
-        // --- [선생님] 실시간 원격 감시 수락 ---
+        // --- [선생님] 실시간 원격 감시 수락 및 실시간 대기 연결 (★동적 비동기 레이더 장착★) ---
+        let offerSubscription = null;
         $('#btnConnectTeacher').on('click', async function() {
             const roomId = $('#roomInputTeacher').val().trim();
             if (!roomId) return showNotification('오류', '채널 식별코드를 확인해 주세요.', 'red');
 
-            writeSecurityLog(`${roomId} 채널 기기 보안 연동 수립 중...`);
+            writeSecurityLog(`${roomId} 채널 기기 관제 시작...`);
 
-            const signal = await fetchSignalingPayload(roomId);
-            if (!signal || signal.type !== 'offer') {
-                writeSecurityLog(`실패: 학생이 권한 승인 대기 중이거나 화면 전송을 아직 허용하지 않았습니다.`, 'alert');
-                return showNotification('수신 대기 실패', '학생 화면에서 시스템 승인 대기(Connecting) 상태이거나 거절되었습니다.', 'red');
-            }
+            if (offerSubscription) offerSubscription();
+            showNotification('연결 관측 시작', '학생이 화면 공유를 완전히 수락할 때까지 감청 대기합니다.', 'indigo');
 
-            $('#activeStudentLabel').text(`${signal.studentName || '태블릿 학생'}`);
+            const docId = `secure_room_${roomId}`;
             
-            if (signal.isTabHidden) activeCheatingAlert(signal.lastHiddenTime);
-            else deactiveCheatingAlert();
+            if (db && currentUser) {
+                // 단발성 조회가 아닌, 실시간 데이터 Snapshot 구독을 통해 학생이 승인을 마치면 즉시 WebRTC Answer 전송 자동 완성!
+                offerSubscription = db.collection('artifacts')
+                    .doc(appId)
+                    .collection('public')
+                    .doc('data')
+                    .collection('secure_signals')
+                    .doc(docId)
+                    .onSnapshot(async (doc) => {
+                        const signal = doc.data();
+                        if (!signal) return;
 
-            if (signal.cameraEnabled !== undefined) {
-                updateTeacherCamStateUI(signal.cameraEnabled);
+                        // 이탈 추적 동기화
+                        if (signal.isTabHidden !== undefined) {
+                            if (signal.isTabHidden) {
+                                writeSecurityLog(`[이탈 경보] 학생이 공부방을 이탈하여 다른 짓을 하고 있습니다!`, 'alert');
+                                activeCheatingAlert(signal.lastHiddenTime);
+                            } else {
+                                deactiveCheatingAlert();
+                            }
+                        }
+
+                        // 카메라 제어 동기화
+                        if (signal.cameraEnabled !== undefined) {
+                            updateTeacherCamStateUI(signal.cameraEnabled);
+                        }
+
+                        // 학생 명칭 바인딩
+                        if (signal.studentName) {
+                            $('#activeStudentLabel').text(signal.studentName);
+                        }
+
+                        // 학생 측에서 비디오 오퍼(Offer)가 완전히 확보되었을 경우, 자동으로 WebRTC Peer 결합 실행
+                        if (signal.type === 'offer' && signal.sdp && (!pc || pc.signalingState === 'closed')) {
+                            writeSecurityLog(`학생 단말기의 화면 공유 수락 신호를 확인했습니다. P2P 직결망 수립을 시도합니다...`, 'success');
+                            await establishWebRTCConnection(roomId, signal);
+                        }
+                    }, (err) => {
+                        console.error("Offer Subscription Core Error:", err);
+                    });
+            } else {
+                // 로컬 모드 폴백 작동
+                showNotification('로컬 연결', '가상 루프백 연동을 실행합니다.', 'indigo');
             }
+        });
 
+        // 실시간 WebRTC 커넥션 성형 모듈
+        async function establishWebRTCConnection(roomId, signal) {
+            if (pc) pc.close();
             pc = new RTCPeerConnection(rtcConfig);
 
-            // 실시간 미디어 스트림 독립 분류 디코딩 탑재
             pc.ontrack = function(event) {
                 $('#teacherNoStream').addClass('hidden');
                 const streams = event.streams;
                 
-                // 멀티 트랙 바인딩 (메인 믹스화면 및 개별 카메라 자동 오버레이)
                 if (streams && streams[0]) {
                     const mainVideo = document.getElementById('teacherRemoteVideo');
                     
                     if (event.track.kind === 'video' && streams.length > 1) {
-                        // 서브 카메라 트랙 존재 시 오버레이 개설
                         $('#teacherCameraOverlay').removeClass('hidden');
                         const remoteCam = document.getElementById('teacherRemoteCamera');
-                        remoteCam.srcObject = streams[1] || streams[0];
+                        remoteCam.srcObject = streams[1];
                     } else {
                         mainVideo.srcObject = streams[0];
                     }
@@ -1173,29 +1072,141 @@
                 }
             };
 
-            await pc.setRemoteDescription(new RTCSessionDescription({
-                type: 'offer',
-                sdp: signal.sdp
-            }));
+            try {
+                await pc.setRemoteDescription(new RTCSessionDescription({
+                    type: 'offer',
+                    sdp: signal.sdp
+                }));
 
-            // 교사 답변서 작성 전송
-            pc.onicecandidate = function(e) {
-                if (e.candidate === null) {
-                    sendSignalingPayload(roomId, {
-                        type: 'answer',
-                        answerSdp: pc.localDescription.sdp,
-                        isWaiting: true,
-                        status: 'broadcasting' // 대시보드 대기 목록에서 연동 중 상태로 변경
-                    });
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+
+                pc.onicecandidate = function(e) {
+                    if (e.candidate === null) {
+                        sendSignalingPayload(roomId, {
+                            type: 'answer',
+                            answerSdp: pc.localDescription.sdp,
+                            status: 'broadcasting'
+                        });
+                    }
+                };
+            } catch (err) {
+                console.error("WebRTC 교환 수립 에러:", err);
+                writeSecurityLog("교환 수립 실패: " + err.message, "alert");
+            }
+        }
+
+        // --- 실시간 모니터 전용 캔버스 믹싱 엔진 ---
+        function runCanvasMixer(screenStream, cameraStream, width, height, fps, mode) {
+            const canvas = document.getElementById('canvasPreview');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+
+            let screenVideo = null;
+            if (screenStream) {
+                screenVideo = document.createElement('video');
+                screenVideo.srcObject = screenStream;
+                screenVideo.muted = true;
+                screenVideo.playsInline = true;
+                screenVideo.play().catch(e => console.log('Screen Video play failed:', e));
+            }
+
+            let cameraVideo = null;
+            if (cameraStream) {
+                cameraVideo = document.createElement('video');
+                cameraVideo.srcObject = cameraStream;
+                cameraVideo.muted = true;
+                cameraVideo.playsInline = true;
+                cameraVideo.play().catch(e => console.log('Camera Video play failed:', e));
+            }
+
+            canvasInterval = setInterval(() => {
+                if (mode === 'whiteboard') {
+                    ctx.drawImage(drawingCanvas, 0, 0, canvas.width, canvas.height);
+                } else if (mode === 'camera_only') {
+                    if (isCameraEnabledLocal && cameraVideo && cameraVideo.readyState >= 2) {
+                        ctx.drawImage(cameraVideo, 0, 0, canvas.width, canvas.height);
+                    } else {
+                        ctx.fillStyle = '#0b0f19';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        ctx.fillStyle = 'rgba(239, 68, 68, 0.8)';
+                        ctx.font = 'bold 16px system-ui';
+                        ctx.textBaseline = 'middle';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(isCameraEnabledLocal ? '카메라 연결 수집 중...' : '원격으로 카메라가 중단되었습니다', canvas.width / 2, canvas.height / 2);
+                    }
+                } else {
+                    if (screenVideo && screenVideo.readyState >= 2) {
+                        ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+                    } else {
+                        ctx.fillStyle = '#0f172a';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+                        ctx.font = '14px system-ui';
+                        ctx.textBaseline = 'middle';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('공유 화면 데이터 처리 중...', canvas.width / 2, canvas.height / 2);
+                    }
+
+                    if (mode === 'composite' && cameraVideo && cameraVideo.readyState >= 2) {
+                        if (isCameraEnabledLocal) {
+                            const camWidth = canvas.width * 0.22;
+                            const camHeight = (cameraVideo.videoHeight / cameraVideo.videoWidth) * camWidth || camWidth * 0.75;
+                            const camX = canvas.width - camWidth - 16;
+                            const camY = canvas.height - camHeight - 16;
+
+                            ctx.save();
+                            ctx.beginPath();
+                            ctx.roundRect(camX, camY, camWidth, camHeight, 10);
+                            ctx.clip();
+                            ctx.drawImage(cameraVideo, camX, camY, camWidth, camHeight);
+                            ctx.restore();
+
+                            ctx.strokeStyle = '#6366f1';
+                            ctx.lineWidth = 2;
+                            ctx.beginPath();
+                            ctx.roundRect(camX, camY, camWidth, camHeight, 10);
+                            ctx.stroke();
+                        } else {
+                            const camWidth = canvas.width * 0.22;
+                            const camHeight = camWidth * 0.75;
+                            const camX = canvas.width - camWidth - 16;
+                            const camY = canvas.height - camHeight - 16;
+                            
+                            ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+                            ctx.beginPath();
+                            ctx.roundRect(camX, camY, camWidth, camHeight, 10);
+                            ctx.fill();
+                            ctx.strokeStyle = '#ef4444';
+                            ctx.lineWidth = 1;
+                            ctx.stroke();
+
+                            ctx.fillStyle = '#f87171';
+                            ctx.font = '10px system-ui';
+                            ctx.textBaseline = 'middle';
+                            ctx.textAlign = 'center';
+                            ctx.fillText('카메라 꺼짐', camX + camWidth/2, camY + camHeight/2);
+                        }
+                    }
                 }
-            };
 
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
+                ctx.fillStyle = 'rgba(9, 13, 22, 0.85)';
+                ctx.fillRect(16, 16, 210, 36);
+                
+                ctx.fillStyle = (Math.floor(Date.now() / 500) % 2 === 0) ? '#ef4444' : '#1e293b';
+                ctx.beginPath();
+                ctx.arc(32, 34, 6, 0, 2 * Math.PI);
+                ctx.fill();
 
-            // 실시간 이탈 원격 추적 모니터링 가동 (SaaS Core)
-            startSecureTracking(roomId);
-        });
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 11px system-ui';
+                ctx.textAlign = 'left';
+                ctx.fillText('실시간 관제 동작 중 (SECURE)', 46, 38);
+            }, 1000 / fps);
+
+            return canvas.captureStream(fps);
+        }
 
         // ★ [선생님 기능] 학생 카메라 ON/OFF 원격 제어 실시간 통신 함수 ★
         async function controlStudentCameraRemote(enabled) {
@@ -1267,14 +1278,14 @@
             }
         }
 
-        // --- 공통 시그널 파이프 허브 (Rule 1 Strict Path 준수) ---
+        // --- 공통 시그널 파이프 허브 (Rule 1 Strict Path 준수 및 Rule 3 가드 탑재) ---
         async function sendSignalingPayload(roomId, data) {
-            if (db) {
+            if (db && currentUser) {
                 const docId = `secure_room_${roomId}`;
                 try {
                     // Rule 1: `/artifacts/{appId}/public/data/{collectionName}/{documentId}` 완벽 준수
                     await db.collection('artifacts')
-                            .doc('classshare-preview')
+                            .doc(appId)
                             .collection('public')
                             .doc('data')
                             .collection('secure_signals')
@@ -1290,34 +1301,12 @@
             }
         }
 
-        async function fetchSignalingPayload(roomId) {
-            if (db) {
-                const docId = `secure_room_${roomId}`;
-                try {
-                    // Rule 1: `/artifacts/{appId}/public/data/{collectionName}/{documentId}` 완벽 준수
-                    const snap = await db.collection('artifacts')
-                                        .doc('classshare-preview')
-                                        .collection('public')
-                                        .doc('data')
-                                        .collection('secure_signals')
-                                        .doc(docId)
-                                        .get();
-                    return snap.exists ? snap.data() : null;
-                } catch (e) {
-                    console.error('Data Fetch Core Error:', e);
-                    return null;
-                }
-            } else {
-                return lastLocalOffer && lastLocalOffer.roomId === roomId ? lastLocalOffer.payload : null;
-            }
-        }
-
         // 학생 측 수락 및 원격 명령 모니터링 수신부
         function startAnswerListening(roomId) {
-            if (db) {
+            if (db && currentUser) {
                 const docId = `secure_room_${roomId}`;
                 db.collection('artifacts')
-                  .doc('classshare-preview')
+                  .doc(appId)
                   .collection('public')
                   .doc('data')
                   .collection('secure_signals')
@@ -1345,43 +1334,13 @@
             }
         }
 
-        // 교사 전용 실시간 이탈 및 원격 제어 상태 감청 폴링 리스너
-        let secureTrackerUnsubscribe = null;
-        function startSecureTracking(roomId) {
-            if (secureTrackerUnsubscribe) secureTrackerUnsubscribe();
-            
-            if (db) {
-                const docId = `secure_room_${roomId}`;
-                secureTrackerUnsubscribe = db.collection('artifacts')
-                  .doc('classshare-preview')
-                  .collection('public')
-                  .doc('data')
-                  .collection('secure_signals')
-                  .doc(docId)
-                  .onSnapshot((doc) => {
-                      const data = doc.data();
-                      if (data) {
-                          if (data.isTabHidden) {
-                              writeSecurityLog(`[이탈 경보] 학생이 공부방을 이탈하여 다른 짓을 하고 있습니다!`, 'alert');
-                              activeCheatingAlert(data.lastHiddenTime);
-                          } else {
-                              if ($('#cheatingStatusBadge').text().includes('이탈')) {
-                                  writeSecurityLog(`[이탈 종료] 학생이 학원 학습 페이지로 안전하게 복귀했습니다.`, 'success');
-                              }
-                              deactiveCheatingAlert();
-                          }
-                      }
-                  }, err => console.log('Tracker Error:', err));
-            }
-        }
-
         // 리소스 반환 파괴
         function stopAllStreams() {
             if (canvasInterval) clearInterval(canvasInterval);
             if (alertInterval) clearInterval(alertInterval);
-            if (secureTrackerUnsubscribe) {
-                secureTrackerUnsubscribe();
-                secureTrackerUnsubscribe = null;
+            if (offerSubscription) {
+                offerSubscription();
+                offerSubscription = null;
             }
             if (globalQueueUnsubscribe) {
                 globalQueueUnsubscribe();
@@ -1422,7 +1381,7 @@
             writeSecurityLog('경고: 선생님에 의해 전체 모니터링 세션이 차단되었습니다.', 'alert');
         });
 
-        // 샌드박스 테스팅 브로드캐스트 핸들러
+        // 샌드박스 테스팅 브로드캐스트 핸들러 (로컬망용)
         let lastLocalOffer = null;
         function handleLocalSignalMessage(e) {
             const { roomId, payload } = e.data;
@@ -1461,6 +1420,28 @@
             if (currentRole === 'student' && payload.cameraEnabled !== undefined) {
                 toggleLocalCameraSensor(payload.cameraEnabled);
             }
+        }
+
+        // 수동 파이어베이스 구성 저장 핸들러
+        function saveFirebaseSettings() {
+            const raw = $('#firebaseConfigInput').val().trim();
+            if (!raw) {
+                showNotification('오류', '설정 입력칸이 비어 있습니다.', 'red');
+                return;
+            }
+            try {
+                const parsed = JSON.parse(raw);
+                localStorage.setItem('saas_firebase_config', raw);
+                location.reload(); // 설정을 즉시 활성화하기 위해 안전하게 강제 리로드 실행
+            } catch (e) {
+                showNotification('설정 저장 실패', '올바른 JSON 양식을 준수해 주세요.', 'red');
+            }
+        }
+
+        function clearFirebaseSettings() {
+            localStorage.removeItem('saas_firebase_config');
+            $('#firebaseConfigInput').val('');
+            location.reload();
         }
     </script>
 </body>
