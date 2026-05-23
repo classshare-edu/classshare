@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ClassShare LIVE - 실시간 학생 화면 통제 및 모니터링</title>
+    <title>ClassShare LIVE - 실시간 학생 화면 통제 및 원격 카메라 관제</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- jQuery CDN -->
@@ -113,7 +113,7 @@
                     <span class="text-xs font-bold text-red-400 uppercase tracking-widest">강의실 화면 관제 모드</span>
                     <h2 class="text-2xl font-black text-white mt-1">학생 단말기 송출</h2>
                     <p class="text-xs text-slate-400 mt-2 leading-relaxed">
-                        선생님 화면에 학생 기기의 실시간 작동 상태 및 카메라를 동시 송출합니다. 다른 탭으로 이동 시 알림이 전송됩니다.
+                        선생님 화면에 학생 기기의 실시간 작동 상태 및 카메라를 동시 송출합니다. 다른 탭이나 화면 이탈 시 즉시 경고가 전송됩니다.
                     </p>
                 </div>
 
@@ -129,11 +129,12 @@
                     </div>
 
                     <div>
-                        <label class="block text-xs font-bold text-slate-300 mb-1.5">송출 기기 모드 선택</label>
+                        <label class="block text-xs font-bold text-slate-300 mb-1.5">송출 기기 모드 선택 (★옵션 대대적 수정★)</label>
                         <select id="sharingMode" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-indigo-300">
-                            <option value="composite" selected>화면 전체 송출 + 전면 카메라 합성 (기기 감시용)</option>
-                            <option value="screen_only">화면만 송출 (전체 기기 제어)</option>
-                            <option value="whiteboard">자필 수학 연습장 송출 (실시간 풀이 전용)</option>
+                            <option value="composite" selected>화면 전체 송출 + 전면 카메라 합성 (기기 감시 권장)</option>
+                            <option value="screen_only">화면만 단독 송출 (전체 기기 제어)</option>
+                            <option value="camera_only">카메라만 단독 송출 (얼굴/책상 감시 전용 ★)</option>
+                            <option value="whiteboard">자필 수학 연습장 송출 (S펜 필기 전용)</option>
                         </select>
                     </div>
                 </div>
@@ -153,7 +154,10 @@
                 <div class="bg-slate-900 border border-slate-800/80 p-4 rounded-2xl">
                     <div class="flex justify-between items-center mb-3">
                         <span class="text-xs font-bold text-slate-400">송출 캔버스 오버레이 (실시간 로컬 믹싱 정보)</span>
-                        <span id="studentLiveStatus" class="bg-slate-950 border border-slate-800 text-slate-400 px-3 py-1 rounded-full text-[10px] font-bold">오프라인</span>
+                        <div class="flex items-center space-x-2">
+                            <span id="cameraStatusIndicator" class="bg-indigo-950 border border-indigo-900 text-indigo-300 px-2 py-1 rounded text-[10px] font-mono">카메라 활성화됨</span>
+                            <span id="studentLiveStatus" class="bg-slate-950 border border-slate-800 text-slate-400 px-3 py-1 rounded-full text-[10px] font-bold">오프라인</span>
+                        </div>
                     </div>
                     
                     <!-- 비디오/캔버스 오버레이 뷰포트 -->
@@ -189,7 +193,7 @@
                             </div>
                             <h4 class="text-base font-bold text-white">학습 이탈 방지 관제 수립대기</h4>
                             <p class="text-xs text-slate-400 max-w-sm mt-1 leading-relaxed">
-                                '화면 감시 방송 가동' 버튼을 누르고 전체화면 공유 권한을 승인해 주십시오. 다른 탭이나 앱으로 이동하면 즉시 이탈 알림이 기록됩니다.
+                                '화면 감시 방송 가동' 버튼을 누르고 화면 공유 승인 팝업이 뜨면 <strong class="text-emerald-400">[지금 시작]</strong>을 클릭해 주십시오. 
                             </p>
                         </div>
                     </div>
@@ -245,19 +249,35 @@
                     </div>
                 </div>
 
-                <!-- B그룹: 실시간 부정 행위 / 다른짓 탐지 판넬 -->
+                <!-- B그룹: 실시간 부정 행위 / 다른짓 탐지 판넬 + 원격 카메라 켜기/끄기 기능 탑재 -->
                 <div class="lg:col-span-4 space-y-4">
                     <div class="flex justify-between items-center">
                         <span class="text-xs font-bold text-slate-400 tracking-wider">실시간 이탈 감시 레이더</span>
-                        <span class="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[10px] px-2.5 py-1 rounded-full font-bold">인공지능 실시간 감시</span>
+                        <span class="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[10px] px-2.5 py-1 rounded-full font-bold">보안 정책 가동 중</span>
                     </div>
 
                     <div class="bg-slate-900 border border-slate-800 rounded-3xl p-4 space-y-4 shadow-xl">
                         <!-- 실시간 이탈 발생 감지 보드 -->
                         <div id="studentStatusCard" class="student-card bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex flex-col space-y-3">
                             <div class="flex items-center justify-between">
-                                <h4 id="activeStudentLabel" class="text-sm font-extrabold text-white">감시중인 학생 없음</h4>
+                                <h4 id="activeStudentLabel" class="text-sm font-extrabold text-white font-sans">감시중인 학생 없음</h4>
                                 <span id="cheatingStatusBadge" class="bg-slate-800 text-slate-400 text-[10px] font-bold px-2 py-1 rounded">오프라인</span>
+                            </div>
+
+                            <!-- ★ [원격 카메라 제어 컨트롤러] ★ -->
+                            <div id="cameraControlPanel" class="border-t border-b border-slate-800/80 py-3 space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-bold text-slate-300">학생 카메라 원격 제어</span>
+                                    <span id="teacherCamStateBadge" class="bg-indigo-950 border border-indigo-900 text-indigo-400 text-[10px] px-2 py-0.5 rounded font-bold font-mono">신호대기</span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <button onclick="controlStudentCameraRemote(false)" id="btnCamMute" class="py-2 bg-red-950/50 hover:bg-red-900/60 text-red-400 border border-red-900/40 text-xs font-bold rounded-lg transition">
+                                        📷 카메라 강제 끄기
+                                    </button>
+                                    <button onclick="controlStudentCameraRemote(true)" id="btnCamUnmute" class="py-2 bg-emerald-950/50 hover:bg-emerald-900/60 text-emerald-400 border border-emerald-900/40 text-xs font-bold rounded-lg transition">
+                                        📷 카메라 원격 켜기
+                                    </button>
+                                </div>
                             </div>
                             
                             <!-- 이탈 경고 디스플레이 -->
@@ -271,7 +291,7 @@
                                 </div>
                             </div>
 
-                            <div class="border-t border-slate-800/60 pt-3 flex flex-col space-y-1">
+                            <div class="border-t border-slate-800/60 pt-1 flex flex-col space-y-1">
                                 <span class="text-[10px] text-slate-500 leading-relaxed">
                                     💡 학생이 갤럭시탭 화면 공유 송출 버튼을 끄거나 다른 앱(예: 카카오톡, 게임, 네이버 웹툰, 유튜브)을 실행해 화면이 포커스를 잃으면 감시망에 즉시 등재됩니다.
                                 </span>
@@ -307,7 +327,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
-    <!-- WebRTC, Adaptive Constraints & Cheat Detection Core Script -->
+    <!-- WebRTC, Adaptive Constraints, Remote Camera Control & Cheat Detection Core Script -->
     <script>
         // 글로벌 상태
         let currentRole = 'student';
@@ -318,6 +338,10 @@
         let db = null;
         let firebaseApp = null;
         let localChannel = null;
+
+        // 원격 카메라 동적 바인딩 제어 플래그
+        let cameraStreamGlobal = null;
+        let isCameraEnabledLocal = true;
 
         // 드로잉 보드 전용 변수
         const drawingCanvas = document.getElementById('drawingCanvas');
@@ -395,7 +419,6 @@
 
         // 학생 이탈 감시 이벤트 등록
         function setupFocusDetectors() {
-            // 다른 탭으로 나가거나 화면 최소화 감지
             document.addEventListener('visibilitychange', function() {
                 if (document.visibilityState === 'hidden') {
                     handleStudentCheating(true);
@@ -560,7 +583,7 @@
             isDrawing = false;
         }
 
-        // 모드 변환기
+        // 역할 변환기
         function switchRole(role) {
             currentRole = role;
             stopAllStreams();
@@ -587,12 +610,14 @@
             const mode = $('#sharingMode').val();
             if (mode === 'whiteboard') {
                 $('#whiteboardContainer').removeClass('hidden');
+                $('#canvasPreview').addClass('hidden');
             } else {
                 $('#whiteboardContainer').addClass('hidden');
+                $('#canvasPreview').removeClass('hidden');
             }
         }
 
-        // 1. 파이어베이스 초기 바인딩
+        // 파이어베이스 초기 바인딩
         function initFirebase(config) {
             try {
                 if (firebase.apps.length === 0) {
@@ -669,16 +694,26 @@
                 cameraVideo.srcObject = cameraStream;
                 cameraVideo.muted = true;
                 cameraVideo.playsInline = true;
-                // 카메라 정지/재시작 문제 해결을 위한 트랙 복구 리스너 등록
-                cameraStream.getVideoTracks()[0].onended = () => {
-                    console.log("Camera track ended, rebuilding...");
-                };
                 cameraVideo.play().catch(e => console.log('Camera Video play failed:', e));
             }
 
             canvasInterval = setInterval(() => {
                 if (mode === 'whiteboard') {
                     ctx.drawImage(drawingCanvas, 0, 0, canvas.width, canvas.height);
+                } else if (mode === 'camera_only') {
+                    // 카메라 단독 송출 모드
+                    if (isCameraEnabledLocal && cameraVideo && cameraVideo.readyState >= 2) {
+                        ctx.drawImage(cameraVideo, 0, 0, canvas.width, canvas.height);
+                    } else {
+                        // 카메라가 원격으로 비활성화되어 있거나 불러오기 대기 중인 상태일 때
+                        ctx.fillStyle = '#0b0f19';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        
+                        ctx.fillStyle = 'rgba(239, 68, 68, 0.8)';
+                        ctx.font = 'bold 16px system-ui';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(isCameraEnabledLocal ? '카메라 센서 연결 대기 중...' : '선생님이 카메라를 강제로 종료했습니다', canvas.width / 2, canvas.height / 2);
+                    }
                 } else {
                     // 화면 공유 데이터 우선 렌더링
                     if (screenVideo && screenVideo.readyState >= 2) {
@@ -696,24 +731,45 @@
 
                     // 전면 카메라 합성 렌더링 (화면 우측 하단 고정 오버레이)
                     if (mode === 'composite' && cameraVideo && cameraVideo.readyState >= 2) {
-                        const camWidth = canvas.width * 0.22;
-                        const camHeight = (cameraVideo.videoHeight / cameraVideo.videoWidth) * camWidth || camWidth * 0.75;
-                        const camX = canvas.width - camWidth - 16;
-                        const camY = canvas.height - camHeight - 16;
+                        if (isCameraEnabledLocal) {
+                            const camWidth = canvas.width * 0.22;
+                            const camHeight = (cameraVideo.videoHeight / cameraVideo.videoWidth) * camWidth || camWidth * 0.75;
+                            const camX = canvas.width - camWidth - 16;
+                            const camY = canvas.height - camHeight - 16;
 
-                        // 고급 라운딩 테두리 믹싱
-                        ctx.save();
-                        ctx.beginPath();
-                        ctx.roundRect(camX, camY, camWidth, camHeight, 10);
-                        ctx.clip();
-                        ctx.drawImage(cameraVideo, camX, camY, camWidth, camHeight);
-                        ctx.restore();
+                            // 고급 라운딩 테두리 믹싱
+                            ctx.save();
+                            ctx.beginPath();
+                            ctx.roundRect(camX, camY, camWidth, camHeight, 10);
+                            ctx.clip();
+                            ctx.drawImage(cameraVideo, camX, camY, camWidth, camHeight);
+                            ctx.restore();
 
-                        ctx.strokeStyle = '#6366f1';
-                        ctx.lineWidth = 2;
-                        ctx.beginPath();
-                        ctx.roundRect(camX, camY, camWidth, camHeight, 10);
-                        ctx.stroke();
+                            ctx.strokeStyle = '#6366f1';
+                            ctx.lineWidth = 2;
+                            ctx.beginPath();
+                            ctx.roundRect(camX, camY, camWidth, camHeight, 10);
+                            ctx.stroke();
+                        } else {
+                            // 원격 카메라 꺼짐 시 작은 표시 상자
+                            const camWidth = canvas.width * 0.22;
+                            const camHeight = camWidth * 0.75;
+                            const camX = canvas.width - camWidth - 16;
+                            const camY = canvas.height - camHeight - 16;
+                            
+                            ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+                            ctx.beginPath();
+                            ctx.roundRect(camX, camY, camWidth, camHeight, 10);
+                            ctx.fill();
+                            ctx.strokeStyle = '#ef4444';
+                            ctx.lineWidth = 1;
+                            ctx.stroke();
+
+                            ctx.fillStyle = '#f87171';
+                            ctx.font = '10px system-ui';
+                            ctx.textAlign = 'center';
+                            ctx.fillText('카메라 꺼짐', camX + camWidth/2, camY + camHeight/2);
+                        }
                     }
                 }
 
@@ -749,20 +805,15 @@
             // 모바일 환경 체크 유연화
             const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-            // ★태블릿 전용 고호환성 최적 설계★
-            // 가로채기 화질 제약을 극렬화하여 설정할 시, 갤럭시탭 기기는 화면 공유 캡처를 차단합니다.
-            // 따라서 모바일 기기일 시 constraints 사양을 지극히 유연하게 무제한으로 개방합니다.
             let screenConstraints, cameraConstraints, mixedWidth, mixedHeight, fpsRate;
 
             if (isMobileDevice) {
-                // 모바일 기기는 해상도 규격을 기기 브라우저 자율에 완벽히 양보하여 에러를 원천 차단합니다!
                 screenConstraints = { video: true };
                 cameraConstraints = { video: { facingMode: "user" } };
                 mixedWidth = 854;
                 mixedHeight = 480;
                 fpsRate = 8;
             } else {
-                // 데스크톱 환경은 고사양 강제 적용
                 screenConstraints = { video: { width: 1280, height: 720, frameRate: 15 } };
                 cameraConstraints = { video: { width: 320, height: 240, frameRate: 15 } };
                 mixedWidth = 1280;
@@ -774,24 +825,41 @@
                 let screenStream = null;
                 let cameraStream = null;
 
-                // 1. 화면 공유 획득 (getDisplayMedia)
+                // 1. 화면 공유 획득 (getDisplayMedia) - 에러 및 취소 핸들링 강화
                 if (sharingMode === 'composite' || sharingMode === 'screen_only') {
                     try {
                         screenStream = await navigator.mediaDevices.getDisplayMedia(screenConstraints);
                     } catch (screenErr) {
                         console.error("Screen Share Capture Failure:", screenErr);
-                        showNotification('화면 승인 필수', '갤럭시탭 화면 공유 권한을 반드시 승인하셔야 합니다.', 'red');
-                        return;
+                        
+                        // 갤럭시탭 및 기기에서 사용자가 승인을 거절했거나 권한에 예외가 생겼을 때의 커스텀 메시지 분기처리
+                        if (screenErr.name === 'NotAllowedError') {
+                            showNotification(
+                                '화면 공유 승인 필수', 
+                                '실시간 화면 공유 안내 팝업이 뜨면 [지금 시작]을 꼭 클릭해 주셔야 선생님께 화면이 보입니다.', 
+                                'red'
+                            );
+                        } else {
+                            showNotification(
+                                '기기 호환성 알림', 
+                                '기기 보안 상 화면전송이 불가할 수 있습니다. 대신 [카메라 단독] 혹은 [자필 연습장] 모드로 학습에 참가해 주세요.', 
+                                'indigo'
+                            );
+                        }
+                        return; // 가동 중지하여 비정상 흐름 차단
                     }
                 }
 
-                // 2. 전면 카메라 획득 (getUserMedia)
-                if (sharingMode === 'composite') {
+                // 2. 전면 카메라 획득 (getUserMedia) - 독립 및 원격 통제 지원
+                if (sharingMode === 'composite' || sharingMode === 'camera_only') {
                     try {
                         cameraStream = await navigator.mediaDevices.getUserMedia(cameraConstraints);
+                        cameraStreamGlobal = cameraStream; // 전역 바인딩 보관
+                        isCameraEnabledLocal = true; // 기본값 켜짐 설정
+                        $('#cameraStatusIndicator').text('카메라 켜짐').removeClass('text-red-400 bg-red-950/80 border-red-900').addClass('text-indigo-300 bg-indigo-950 border-indigo-900');
                     } catch (camErr) {
-                        console.warn("Camera Capture Failure, continuing without camera:", camErr);
-                        showNotification('카메라 오류', '카메라를 켤 수 없습니다. 화면만 단독 전송합니다.', 'red');
+                        console.warn("Camera Capture Failure:", camErr);
+                        showNotification('카메라 오류', '카메라를 활성화할 수 없습니다. 권한 승인 내역을 확인해 주세요.', 'red');
                     }
                 }
 
@@ -808,19 +876,19 @@
                 // RTCPeerConnection 생성 및 바인딩
                 pc = new RTCPeerConnection(rtcConfig);
                 
-                // 원격지 트랙 송출 추가
                 mixedStream.getTracks().forEach(track => pc.addTrack(track, mixedStream));
 
-                // ICE Candidate 수집 핸들링
+                // ICE Candidate 수집 완료 후 최적화 전송
                 pc.onicecandidate = function(e) {
                     if (e.candidate === null) {
-                        // 덮어쓰기(Overwrite) 방지를 위해 Firebase 업로드는 Offer 전용 필드에만 격리하여 저장!
+                        // 초기화 시 교사와 충돌되지 않도록 덮어쓰기 방지 병합 구조
                         sendSignalingPayload(roomId, {
                             type: 'offer',
                             sdp: pc.localDescription.sdp,
                             studentName: studentName,
                             isTabHidden: !isUserActiveOnTab,
-                            lastHiddenTime: isUserActiveOnTab ? 0 : Date.now()
+                            lastHiddenTime: isUserActiveOnTab ? 0 : Date.now(),
+                            cameraEnabled: true // 학생 카메라 최초 실행 시 ON 설정 동기화
                         });
                     }
                 };
@@ -832,12 +900,12 @@
                 $('#btnStopBroadcasting').removeClass('hidden');
                 showNotification('모니터링 감시 가동', '실시간 원격 전송 파이프라인이 정상 활성화되었습니다.', 'emerald');
 
-                // 선생님 측의 수락 응답(Answer) 리스너 구동
+                // 선생님 측의 수락 응답(Answer) 리스너 및 카메라 제어 신호 탐지 개시
                 startAnswerListening(roomId);
 
             } catch (err) {
                 console.error("Critical System Init Error:", err);
-                showNotification('하드웨어 오동작', '해당 기기의 미디어 모듈에 접근할 수 없습니다.', 'red');
+                showNotification('시스템 가동 중단', '입력장치 셋업에 문제가 생겼습니다. 새로고침 후 다시 시도해 주세요.', 'red');
             }
         });
 
@@ -863,11 +931,13 @@
 
             $('#activeStudentLabel').text(`${signal.studentName || '태블릿 학생'}`);
             
-            // 학생 상태에 따른 1차 레이더 동기화
-            if (signal.isTabHidden) {
-                activeCheatingAlert(signal.lastHiddenTime);
-            } else {
-                deactiveCheatingAlert();
+            // 학생 이탈 상태 동기화
+            if (signal.isTabHidden) activeCheatingAlert(signal.lastHiddenTime);
+            else deactiveCheatingAlert();
+
+            // 학생 카메라의 원격 통제 상태 디스플레이에 반영
+            if (signal.cameraEnabled !== undefined) {
+                updateTeacherCamStateUI(signal.cameraEnabled);
             }
 
             pc = new RTCPeerConnection(rtcConfig);
@@ -889,7 +959,6 @@
                 }
             };
 
-            // 덮어쓰기 방지를 고려하여, 학생의 sdp를 원격지로 등록
             await pc.setRemoteDescription(new RTCSessionDescription({
                 type: 'offer',
                 sdp: signal.sdp
@@ -898,7 +967,6 @@
             // 교사 측 답변서 작성 전송
             pc.onicecandidate = function(e) {
                 if (e.candidate === null) {
-                    // 데이터 병합 기술 활용 (학생 신호를 지우지 않고 오직 answer만 주입!)
                     sendSignalingPayload(roomId, {
                         type: 'answer',
                         answerSdp: pc.localDescription.sdp
@@ -909,9 +977,56 @@
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
 
-            // 실시간 이탈 원격 폴링 추적 모니터링 가동 (SaaS Core)
+            // 실시간 이탈 및 카메라 상태 원격 추적 폴링 리스너 가동 (SaaS Core)
             startSecureTracking(roomId);
         });
+
+        // ★ [선생님 기능] 학생 카메라 ON/OFF 원격 제어 실시간 통신 함수 ★
+        async function controlStudentCameraRemote(enabled) {
+            const roomId = $('#roomInputTeacher').val().trim();
+            if (!roomId) return showNotification('오류', '채널 식별코드를 적어주세요.', 'red');
+
+            try {
+                // 파이어베이스 병합 갱신을 통해 학생 카메라 제어 데이터 업로드
+                await sendSignalingPayload(roomId, {
+                    cameraEnabled: enabled
+                });
+                
+                updateTeacherCamStateUI(enabled);
+                writeSecurityLog(`[원격 제어 명령] 학생 카메라를 ${enabled ? '강제로 켰습니다' : '강제로 껐습니다'}.`, enabled ? 'success' : 'alert');
+                showNotification('원격 제어 송신', `학생의 단말기 카메라를 ${enabled ? '켭니다' : '끕니다'}.`, 'indigo');
+            } catch (err) {
+                console.error("Camera Remote Control Error:", err);
+                showNotification('원격 제어 실패', '신호 수신망에 연결할 수 없습니다.', 'red');
+            }
+        }
+
+        // 선생님 UI의 카메라 제어 상태 표시 업데이트
+        function updateTeacherCamStateUI(enabled) {
+            if (enabled) {
+                $('#teacherCamStateBadge').text('원격 작동 중 (ON)').removeClass('bg-red-950/80 text-red-400 border-red-900').addClass('bg-indigo-950 text-indigo-400 border-indigo-900');
+            } else {
+                $('#teacherCamStateBadge').text('원격 중단됨 (OFF)').removeClass('bg-indigo-950 text-indigo-400 border-indigo-900').addClass('bg-red-950/80 text-red-400 border-red-900');
+            }
+        }
+
+        // 학생 측 카메라 켜기/끄기 동적 트랙 토글러
+        function toggleLocalCameraSensor(enabled) {
+            if (cameraStreamGlobal) {
+                cameraStreamGlobal.getVideoTracks().forEach(track => {
+                    track.enabled = enabled; // 하드웨어 센서 트랙의 전송 상태 변경
+                });
+                isCameraEnabledLocal = enabled;
+                
+                if (enabled) {
+                    $('#cameraStatusIndicator').text('카메라 원격 작동').removeClass('text-red-400 bg-red-950/80 border-red-900').addClass('text-indigo-300 bg-indigo-950 border-indigo-900');
+                    showNotification('카메라 전송 복원', '선생님이 카메라 전송을 원격으로 재개했습니다.', 'indigo');
+                } else {
+                    $('#cameraStatusIndicator').text('카메라 원격 꺼짐').removeClass('text-indigo-300 bg-indigo-950 border-indigo-900').addClass('text-red-400 bg-red-950/80 border-red-900');
+                    showNotification('카메라 전송 차단', '선생님에 의해 강제로 카메라가 꺼졌습니다.', 'red');
+                }
+            }
+        }
 
         // 실시간 이탈 경고 발생 시스템
         let alertInterval = null;
@@ -943,8 +1058,7 @@
             if (db) {
                 const docId = `secure_room_${roomId}`;
                 try {
-                    // ★덮어쓰기 파괴 방지 코드★ - set 연산시 { merge: true } 옵션을 부여하여
-                    // 학생 오퍼(sdp), 교사 답변(answerSdp), 이탈 감지 필드가 충돌 없이 동시에 병존합니다!
+                    // merge: true 옵션으로 상호 시그널 손실 없는 완벽한 실시간 양방향 채널 확보
                     await db.collection('artifacts')
                             .doc('classshare-preview')
                             .collection('public')
@@ -983,7 +1097,7 @@
             }
         }
 
-        // 학생 측 수락 대기 감청부 (교사 신호 관제)
+        // 학생 측 수락 및 원격 명령 모니터링 수신부
         function startAnswerListening(roomId) {
             if (db) {
                 const docId = `secure_room_${roomId}`;
@@ -995,20 +1109,28 @@
                   .doc(docId)
                   .onSnapshot((doc) => {
                       const data = doc.data();
-                      if (data && data.answerSdp && pc && pc.signalingState !== 'stable') {
-                          pc.setRemoteDescription(new RTCSessionDescription({
-                              type: 'answer',
-                              sdp: data.answerSdp
-                          })).then(() => {
-                              $('#studentLiveStatus').text('원격 감시 연동 완료').removeClass('bg-emerald-500').addClass('bg-indigo-600');
-                              showNotification('보안 가동 완료', '선생님 대시보드와 초저지연 직결이 완료되었습니다.', 'emerald');
-                          }).catch(e => console.log('Answer Apply Failure:', e));
+                      if (data) {
+                          // 1. 선생님의 수락 응답(answerSdp) 연결
+                          if (data.answerSdp && pc && pc.signalingState !== 'stable') {
+                              pc.setRemoteDescription(new RTCSessionDescription({
+                                  type: 'answer',
+                                  sdp: data.answerSdp
+                              })).then(() => {
+                                  $('#studentLiveStatus').text('원격 감시 연동 완료').removeClass('bg-emerald-500').addClass('bg-indigo-600');
+                                  showNotification('보안 가동 완료', '선생님 대시보드와 초저지연 직결이 완료되었습니다.', 'emerald');
+                              }).catch(e => console.log('Answer Apply Failure:', e));
+                          }
+                          
+                          // 2. 선생님의 원격 카메라 통제 제어 명령(cameraEnabled) 실시간 탐지 및 반영
+                          if (data.cameraEnabled !== undefined && data.cameraEnabled !== isCameraEnabledLocal) {
+                              toggleLocalCameraSensor(data.cameraEnabled);
+                          }
                       }
                   }, err => console.log('Scribe Engine Error:', err));
             }
         }
 
-        // 교사 전용 실시간 이탈 폴링 리스너 (Bust-the-Cheater)
+        // 교사 전용 실시간 이탈 및 원격 제어 상태 감청 폴링 리스너
         let secureTrackerUnsubscribe = null;
         function startSecureTracking(roomId) {
             if (secureTrackerUnsubscribe) secureTrackerUnsubscribe();
@@ -1024,6 +1146,7 @@
                   .onSnapshot((doc) => {
                       const data = doc.data();
                       if (data) {
+                          // 이탈 데이터 확인
                           if (data.isTabHidden) {
                               writeSecurityLog(`[이탈 경보] 학생이 공부방을 이탈하여 다른 짓을 하고 있습니다!`, 'alert');
                               activeCheatingAlert(data.lastHiddenTime);
@@ -1058,6 +1181,7 @@
                 mixedStream.getTracks().forEach(track => track.stop());
                 mixedStream = null;
             }
+            cameraStreamGlobal = null;
             $('#studentLiveStatus').text('오프라인').removeClass('bg-emerald-500 bg-indigo-600').addClass('text-slate-400 font-normal');
             $('#screenInstruction').removeClass('hidden');
             $('#btnStartBroadcasting').removeClass('hidden');
@@ -1081,6 +1205,10 @@
                     $('#activeStudentLabel').text(`${payload.studentName}`);
                     if (payload.isTabHidden) activeCheatingAlert(payload.lastHiddenTime);
                     else deactiveCheatingAlert();
+                    
+                    if (payload.cameraEnabled !== undefined) {
+                        updateTeacherCamStateUI(payload.cameraEnabled);
+                    }
                 }
             } else if (payload.type === 'answer') {
                 if (pc && pc.signalingState !== 'stable') {
@@ -1102,6 +1230,11 @@
                     writeSecurityLog(`[이탈 종료] 학생이 학원 학습 페이지로 복귀했습니다.`, 'success');
                     deactiveCheatingAlert();
                 }
+            }
+
+            // 로컬 테스트용 카메라 제어 반영
+            if (currentRole === 'student' && payload.cameraEnabled !== undefined) {
+                toggleLocalCameraSensor(payload.cameraEnabled);
             }
         }
     </script>
