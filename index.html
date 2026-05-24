@@ -438,8 +438,8 @@
     <script>
 
 		// 전역으로 관리할 학생 정보 변수
-		let currentcurrentRoomVal = "";
-		let currentcurrentNameVal = "";
+		let currentRoomVal = "";
+		let currentNameVal = "";
 		//let studentInterval = null; // 인터벌 객체도 전역으로 관리
 
 
@@ -1096,10 +1096,10 @@
          * ========================================================================== */
         async function startStudentBroadcasting() {
 			// 1. 전역 변수에 값 저장
-			currentcurrentRoomVal = document.getElementById('studentRoomInput').value.trim();
-			currentcurrentNameVal = document.getElementById('studentNameInput').value.trim();
+			currentRoomVal = document.getElementById('studentRoomInput').value.trim();
+			currentNameVal = document.getElementById('studentNameInput').value.trim();
 
-			if (!currentcurrentRoomVal || !currentcurrentNameVal) {
+			if (!currentRoomVal || !currentNameVal) {
 				return toast('입력값 누락', '강의실 코드와 학생 이름을 입력해 주세요.', 'red');
 			}
 
