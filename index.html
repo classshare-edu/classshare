@@ -1671,25 +1671,23 @@ function endTeacherAnnotation(docId) {
 	// 1. 첨삭 모드 종료 처리
 	isAnnotating = false;
 
-	// 2. [가장 중요] 기존 인터벌을 완전히 제거
-    // 2. 해당 학생의 화면 갱신 인터벌이 있다면 일시 정지
-    if (typeof studentInterval !== 'undefined' && studentInterval) {
+	// 2. 중요: 인터벌을 안전하게 종료하고 초기화
+    if (studentInterval) {
         clearInterval(studentInterval);
-        console.log("첨삭 모드 진입: 학생 화면 갱신을 일시 중지합니다.");
-        studentInterval = null; // null로 초기화하여 중첩 방지
+        studentInterval = null;
     }
-    
-	// 2. [추가 부분] 값을 확실하게 다시 가져와서 전역 변수에 동기화
-    // 혹시라도 페이지 내에서 값이 바뀌었을 경우를 대비해 최신 상태를 반영합니다.
+
+    // 3. 최신 데이터 동기화
     currentRoomVal = document.getElementById('studentRoomInput').value.trim();
     currentNameVal = document.getElementById('studentNameInput').value.trim();
 
-	
-
-    studentInterval = setInterval(() => {
-        // 전역 변수를 참조
-        sendStudentSnapshotRelay(currentRoomVal, currentNameVal);
-    }, 1500);
+    // 4. [수정] 인터벌이 없을 때만 생성 (중복 방지)
+    if (!studentInterval) {
+        studentInterval = setInterval(() => {
+            sendStudentSnapshotRelay(currentRoomVal, currentNameVal);
+        }, 1500);
+        console.log("정상 복구: 갱신 인터벌을 다시 시작합니다.");
+    }
 
 
     const tileCard = document.getElementById(`tile_card_${docId}`);
