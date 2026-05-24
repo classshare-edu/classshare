@@ -1280,44 +1280,62 @@
             }
         }
 
+
+
+
+
         function stopStudentBroadcasting() {
             tearDownStudentResources();
             toast('관제 중단', '실시간 송출 및 감시 채널을 안전하게 회수했습니다.', 'indigo');
         }
 
-        function tearDownStudentResources() {
-            if (studentInterval) {
-                clearInterval(studentInterval);
-                studentInterval = null;
-            }
-            if (studentCamStream) {
-                studentCamStream.getTracks().forEach(t => t.stop());
-                studentCamStream = null;
-            }
-            if (studentPc) {
-                studentPc.close();
-                studentPc = null;
-            }
 
-            const localVideo = document.getElementById('studentCameraVideo');
-            if (localVideo) localVideo.srcObject = null;
-            document.getElementById('studentCameraPlaceholder').classList.remove('hidden');
-            document.getElementById('localCamLed').className = "w-1.5 h-1.5 rounded-full bg-red-500";
-            document.getElementById('btnStudentStart').classList.remove('hidden');
-            document.getElementById('btnStudentStop').classList.add('hidden');
 
-            const overlayImg = document.getElementById('studentAnnotationOverlay');
-            if (overlayImg) {
-                overlayImg.src = "";
-                overlayImg.classList.add('hidden');
-            }
 
-            const currentRoomVal = document.getElementById('studentRoomInput').value.trim();
-            const currentNameVal = document.getElementById('studentNameInput').value.trim();
-            if (db && currentRoomVal && currentNameVal) {
-                db.collection('artifacts').doc(appId).collection('public').doc('data').collection('secure_signals').doc(`secure_signal_${currentRoomVal}_${currentNameVal}`).delete().catch(()=>{});
-            }
-        }
+async function tearDownStudentResources() {
+    // 1. [가장 먼저] 인터벌을 확실하게 정지 및 null 처리
+    if (studentInterval) {
+        clearInterval(studentInterval);
+        studentInterval = null;
+    }
+
+    // 2. 먼저 데이터를 삭제 (서버에 신호 전송 차단)
+    const currentRoomVal = document.getElementById('studentRoomInput').value.trim();
+    const currentNameVal = document.getElementById('studentNameInput').value.trim();
+    
+    if (db && currentRoomVal && currentNameVal) {
+        // 비동기 삭제를 먼저 시작하고 기다립니다.
+        await db.collection('artifacts').doc(appId).collection('public').doc('data')
+                .collection('secure_signals').doc(`secure_signal_${currentRoomVal}_${currentNameVal}`)
+                .delete()
+                .catch(err => console.log("삭제 실패:", err));
+    }
+
+    // 3. 이제 안전하게 카메라, PC, UI 정리
+    if (studentCamStream) {
+        studentCamStream.getTracks().forEach(t => t.stop());
+        studentCamStream = null;
+    }
+    if (studentPc) {
+        studentPc.close();
+        studentPc = null;
+    }
+
+    const localVideo = document.getElementById('studentCameraVideo');
+    if (localVideo) localVideo.srcObject = null;
+    
+    // UI 초기화
+    document.getElementById('studentCameraPlaceholder').classList.remove('hidden');
+    document.getElementById('localCamLed').className = "w-1.5 h-1.5 rounded-full bg-red-500";
+    document.getElementById('btnStudentStart').classList.remove('hidden');
+    document.getElementById('btnStudentStop').classList.add('hidden');
+
+    const overlayImg = document.getElementById('studentAnnotationOverlay');
+    if (overlayImg) {
+        overlayImg.src = "";
+        overlayImg.classList.add('hidden');
+    }
+}
 
         /* ==========================================================================
          * 🖥️ 5. 선생님 관제실 대시보드 시스템
