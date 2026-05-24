@@ -1598,7 +1598,21 @@
 const globalCanvas = document.getElementById('globalAnnotationCanvas');
 const gCtx = globalCanvas.getContext('2d');
 
+// 첨삭 모드일 때 주기적 갱신을 멈추기 위한 전역 변수
+let isAnnotating = false;
+
 function startTeacherAnnotation(docId) {
+
+	if (event) event.preventDefault();
+
+	// 1. 첨삭 모드 시작 알림
+    isAnnotating = true;
+    
+    // 2. 만약 해당 학생의 갱신 인터벌이 있다면 일시 정지
+    if (studentInterval) {
+        clearInterval(studentInterval);
+    }
+
     const tileCard = document.getElementById(`tile_card_${docId}`);
     if (!tileCard) return;
 
@@ -1631,6 +1645,17 @@ function startTeacherAnnotation(docId) {
 }
 
 function endTeacherAnnotation(docId) {
+
+	// 1. 첨삭 모드 종료
+    isAnnotating = false;
+    
+    // 2. 원래 화면으로 돌아가면 다시 갱신 시작 (인터벌 복구)
+    if (studentInterval) clearInterval(studentInterval);
+    studentInterval = setInterval(() => {
+        sendStudentSnapshotRelay(roomVal, nameVal);
+    }, 1500);
+
+
     const tileCard = document.getElementById(`tile_card_${docId}`);
     if (tileCard) {
         tileCard.classList.remove('teacher-tile-fullscreen');
