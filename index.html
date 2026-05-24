@@ -1572,22 +1572,30 @@
 
         // --- 상세 돋보기 뷰 진입 및 원격 첨삭 연결 가동 ---
         function openStudentDetailZoom(docId) {
-            activeWatchingStudentId = docId;
-            const student = activeStudentQueue[docId];
-            if (!student) return;
+			activeWatchingStudentId = docId;
+			const student = activeStudentQueue[docId];
+			if (!student) return;
 
-            document.getElementById('zoomStudentName').innerText = student.studentName;
-            document.getElementById('studentDetailZoomModal').classList.remove('hidden');
+			document.getElementById('zoomStudentName').innerText = student.studentName;
+			document.getElementById('studentDetailZoomModal').classList.remove('hidden');
 
-            // 돋보기 캔버스 사이즈 최적화 피팅
-            setTimeout(() => {
-                resizeZoomAnnotationCanvas();
-                // 이전 첨삭 내용이 있다면Firestore에서 읽어와서 복구하거나 혹은 깨끗하게 비움
-                clearZoomAnnotation(); 
-            }, 100);
+			// [중요 수정] 이미지 세팅
+			const remoteImg = document.getElementById('zoomRemoteImage');
+			remoteImg.src = student.canvasFrame || "";
+			
+			// 이미지가 세팅된 후 캔버스 크기 조정
+			remoteImg.onload = function() {
+				resizeZoomAnnotationCanvas();
+				clearZoomAnnotation();
+			};
 
-            // 기본 펜 세팅 (빨간펜 기본)
-            setZoomPen('#ef4444', 4);
+			// 만약 이미 이미지가 로드된 상태라면 즉시 실행
+			if (remoteImg.complete) {
+				resizeZoomAnnotationCanvas();
+				clearZoomAnnotation();
+			}
+
+			setZoomPen('#ef4444', 4);
 
             document.getElementById('zoomRemoteImage').src = student.canvasFrame || "";
             document.getElementById('zoomRemoteImage').classList.remove('hidden');
