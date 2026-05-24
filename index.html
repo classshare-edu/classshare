@@ -47,25 +47,28 @@
             touch-action: none;
         }
 
+/* 가장 확실하게 레이어와 투명도를 설정합니다 */
 #zoomCanvasWrapper {
-    position: relative; /* 자식 요소들의 기준점 */
+    position: relative;
+    background-color: white !important; /* 이미지 없을 때 흰색 */
 }
 
 #zoomRemoteImage {
-    z-index: 5; /* 이미지는 뒤에 */
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
+    z-index: 5; 
+    background-color: white; /* 학생 이미지는 흰색 배경 위에서 */
+    display: block; /* block으로 설정해야 크기가 계산됨 */
 }
 
 #zoomAnnotationCanvas {
-    z-index: 10; /* 캔버스는 무조건 앞에 */
+    z-index: 10; 
     position: absolute;
-    width: 100%;
-    height: 100%;
-    background-color: transparent !important; /* 배경 투명 */
+    top: 0;
+    left: 0;
+    background-color: transparent !important; /* 캔버스는 무조건 투명 */
 }
+
+
+
 
     </style>
 </head>
@@ -1600,7 +1603,7 @@ function resizeZoomAnnotationCanvas() {
         }
 
         // --- 상세 돋보기 뷰 진입 및 원격 첨삭 연결 가동 ---
-        function openStudentDetailZoom(docId) {
+		function openStudentDetailZoom(docId) {
 			activeWatchingStudentId = docId;
 			const student = activeStudentQueue[docId];
 			if (!student) return;
@@ -1608,57 +1611,61 @@ function resizeZoomAnnotationCanvas() {
 			document.getElementById('zoomStudentName').innerText = student.studentName;
 			document.getElementById('studentDetailZoomModal').classList.remove('hidden');
 
-			// [중요 수정] 이미지 세팅
+			// 1. 대상 이미지 요소 가져오기
 			const remoteImg = document.getElementById('zoomRemoteImage');
-			remoteImg.src = student.canvasFrame || "";
 			
-			// 이미지가 세팅된 후 캔버스 크기 조정
+			// 2. [핵심] 이미지가 완전히 로드된 후에만 리사이즈/첨삭 초기화 수행
 			remoteImg.onload = function() {
-				resizeZoomAnnotationCanvas();
-				clearZoomAnnotation();
+				console.log("이미지 로드 완료 - 캔버스 리사이즈 실행");
+				resizeZoomAnnotationCanvas(); // 캔버스 크기 동기화
+				clearZoomAnnotation();        // 이전 첨삭 내용 초기화
 			};
 
-			// 만약 이미 이미지가 로드된 상태라면 즉시 실행
-			if (remoteImg.complete) {
-				resizeZoomAnnotationCanvas();
-				clearZoomAnnotation();
-			}
+			// 3. 이미지 소스 할당 (이 한 줄만 남기고 중복 제거하세요)
+			remoteImg.src = student.canvasFrame || "";
+			remoteImg.classList.remove('hidden'); // 이미지를 보여줌
 
+			// 4. 나머지 UI 설정
 			setZoomPen('#ef4444', 4);
 
-            document.getElementById('zoomRemoteImage').src = student.canvasFrame || "";
-            document.getElementById('zoomRemoteImage').classList.remove('hidden');
+			document.getElementById('zoomCameraImageFrame').innerHTML = student.cameraFrame 
+				? `<img class="w-full h-full object-cover scale-x-[-1]" src="${student.cameraFrame}" />` 
+				: `<div class="w-full h-full bg-slate-900 flex flex-col items-center justify-center text-slate-600 text-[10px]"><i class="fa-solid fa-video-slash mb-1"></i>캠 꺼짐</div>`;
 
-            document.getElementById('zoomCameraImageFrame').innerHTML = student.cameraFrame 
-                ? `<img class="w-full h-full object-cover scale-x-[-1]" src="${student.cameraFrame}" />` 
-                : `<div class="w-full h-full bg-slate-900 flex flex-col items-center justify-center text-slate-600 text-[10px]"><i class="fa-solid fa-video-slash mb-1"></i>캠 꺼짐</div>`;
+			// 5. 실시간 동기화 리스너 (기존 Firestore 로직 유지)
+			if (db && currentUser) {
+				if (teacherActiveListener) teacherActiveListener();
+				teacherActiveListener = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('secure_signals').doc(docId)
+					.onSnapshot(async doc => {
+						const data = doc.data();
+						if (!data) return;
 
-            if (db && currentUser) {
-                if (teacherActiveListener) teacherActiveListener();
-                
-                teacherActiveListener = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('secure_signals').doc(docId)
-                  .onSnapshot(async doc => {
-                      const data = doc.data();
-                      if (!data) return;
+						handleCheatingAlertUI(data.studentName, data.isTabHidden);
 
-                      handleCheatingAlertUI(data.studentName, data.isTabHidden);
+						if (data.webrtcOffer && (!teacherPc || teacherPc.signalingState === 'closed')) {
+							establishTeacherP2PLink(docId, data.webrtcOffer);
+						}
 
-                      if (data.webrtcOffer && (!teacherPc || teacherPc.signalingState === 'closed')) {
-                          establishTeacherP2PLink(docId, data.webrtcOffer);
-                      }
+						// 리스너가 업데이트될 때도 이미지 갱신
+						if (data.canvasFrame && data.canvasFrame !== remoteImg.src) {
+							remoteImg.src = data.canvasFrame;
+							// 리스너 업데이트 시에는 onload가 다시 실행되므로 별도 리사이즈 필요 없음
+						}
+						
+						if (data.cameraFrame && (!teacherPc || teacherPc.connectionState !== 'connected')) {
+							document.getElementById('zoomCameraImageFrame').innerHTML = `<img class="w-full h-full object-cover scale-x-[-1]" src="${data.cameraFrame}" />`;
+						}
+					});
+			}
+		}
 
-                      if (data.canvasFrame) {
-                          document.getElementById('zoomRemoteImage').src = data.canvasFrame;
-                      }
-                      
-                      if (data.cameraFrame && (!teacherPc || teacherPc.connectionState !== 'connected')) {
-                          document.getElementById('zoomCameraImageFrame').classList.remove('hidden');
-                          document.getElementById('zoomRemoteCamera').classList.add('hidden');
-                          document.getElementById('zoomCameraImageFrame').innerHTML = `<img class="w-full h-full object-cover scale-x-[-1]" src="${data.cameraFrame}" />`;
-                      }
-                  });
-            }
-        }
+
+function checkCanvasSize() {
+    const canvas = document.getElementById('zoomAnnotationCanvas');
+    console.log("캔버스 가로:", canvas.width, "캔버스 세로:", canvas.height);
+}
+// openStudentDetailZoom 마지막에 호출해서 0이 나오는지 확인하세요.
+
 
         function closeStudentDetailZoom() {
             // 퇴실 전 클라우드 첨삭 레이어 영구 삭제 지시하여 학생 화면을 깨끗하게 원상 복귀
