@@ -46,6 +46,20 @@
             z-index: 50;
             touch-action: none;
         }
+
+
+		#studentNotebookImage {
+			z-index: 10 !important; /* 이미지 */
+		}
+		#zoomAnnotationCanvas {
+			z-index: 20 !important; /* 첨삭 캔버스가 항상 위로 */
+		}
+		#zoomCanvasWrapper {
+			position: relative;
+			z-index: 1;
+		}
+
+
     </style>
 </head>
 <body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col">
@@ -144,7 +158,7 @@
         <div class="relative flex-grow bg-slate-950 flex items-center justify-center p-4 overflow-hidden">
             <div class="relative max-w-full max-h-[80vh] aspect-[4/3] bg-white rounded-2xl shadow-2xl overflow-hidden" id="zoomCanvasWrapper">
                 <!-- 1층: 학생이 보내는 실시간 필기장 화면 (순백색 일치) -->
-                <img id="studentNotebookImage" class="absolute inset-0 w-full h-full object-contain bg-white select-none pointer-events-none" alt="실시간 연습장 확대">
+				<img id="studentNotebookImage" class="absolute inset-0 w-full h-full object-contain bg-white select-none pointer-events-none" alt="실시간 연습장 확대">
                 
                 <!-- 2층: 선생님이 학생 화면 위에 덧그리는 첨삭 투명 캔버스 레이어 -->
                 <canvas id="zoomAnnotationCanvas" class="absolute inset-0 w-full h-full z-10 bg-transparent pointer-events-auto"></canvas>
@@ -939,14 +953,15 @@
 
 function resizeZoomAnnotationCanvas() {
     const wrapper = document.getElementById('zoomCanvasWrapper');
-    const targetImg = document.getElementById('studentNotebookImage'); // 수정된 ID
+    const targetImg = document.getElementById('studentNotebookImage'); // [필수] HTML과 ID 일치
     
     if (!wrapper || !targetImg) return;
 
-    // 이미지의 실제 크기를 캔버스 속성에 반영
+    // 캔버스 크기를 이미지 렌더링 크기에 일치
     zoomAnnotationCanvas.width = targetImg.clientWidth;
     zoomAnnotationCanvas.height = targetImg.clientHeight;
     
+    // 투명 배경 유지 및 초기화
     zoomAnnCtx.clearRect(0, 0, zoomAnnotationCanvas.width, zoomAnnotationCanvas.height);
 }
 
@@ -1583,19 +1598,23 @@ document.getElementById('studentNotebookImage').onload = function() {
 
         // --- 상세 돋보기 뷰 진입 및 원격 첨삭 연결 가동 ---
         function openStudentDetailZoom(docId) {
-            activeWatchingStudentId = docId;
-            const student = activeStudentQueue[docId];
-            if (!student) return;
+			activeWatchingStudentId = docId;
+			const student = activeStudentQueue[docId];
+			if (!student) return;
 
-            document.getElementById('zoomStudentName').innerText = student.studentName;
-            document.getElementById('studentDetailZoomModal').classList.remove('hidden');
+			document.getElementById('zoomStudentName').innerText = student.studentName;
+			document.getElementById('studentDetailZoomModal').classList.remove('hidden');
 
-            // 돋보기 캔버스 사이즈 최적화 피팅
-            setTimeout(() => {
-                resizeZoomAnnotationCanvas();
-                // 이전 첨삭 내용이 있다면Firestore에서 읽어와서 복구하거나 혹은 깨끗하게 비움
-                clearZoomAnnotation(); 
-            }, 100);
+			// [수정] zoomRemoteImage -> studentNotebookImage 로 ID 통일
+			const notebookImg = document.getElementById('studentNotebookImage'); 
+			notebookImg.src = student.canvasFrame || "";
+			notebookImg.classList.remove('hidden');
+
+			// 돋보기 캔버스 사이즈 최적화 피팅
+			setTimeout(() => {
+				resizeZoomAnnotationCanvas(); // 이 함수 안에서 studentNotebookImage를 찾게 됩니다.
+				clearZoomAnnotation(); 
+			}, 100);
 
             // 기본 펜 세팅 (빨간펜 기본)
             setZoomPen('#ef4444', 4);
@@ -1632,6 +1651,15 @@ document.getElementById('studentNotebookImage').onload = function() {
                       }
                   });
             }
+
+
+			// [중요] onSnapshot 내부에서도 ID 수정 필요
+			if (data.canvasFrame) {
+				document.getElementById('studentNotebookImage').src = data.canvasFrame;
+			}
+
+
+
         }
 
         function closeStudentDetailZoom() {
