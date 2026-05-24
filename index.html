@@ -955,18 +955,26 @@
             zoomAnnotationCanvas.addEventListener('touchend', endZoomDrawing);
         }
 
-        function resizeZoomAnnotationCanvas() {
-            const wrapper = document.getElementById('zoomCanvasWrapper');
-            if (!wrapper || wrapper.clientWidth === 0) return;
-            
-            // 학생 필기 이미지 크기에 정확히 대응 동기화
-            zoomAnnotationCanvas.width = wrapper.clientWidth;
-            zoomAnnotationCanvas.height = wrapper.clientHeight;
-            
-            // 투명 배경 보존
-            zoomAnnCtx.clearRect(0, 0, zoomAnnotationCanvas.width, zoomAnnotationCanvas.height);
-        }
+// 1. 캔버스 리사이즈 및 정렬 최적화
+function resizeZoomAnnotationCanvas() {
+    const wrapper = document.getElementById('zoomCanvasWrapper');
+    const targetImg = document.getElementById('zoomRemoteImage'); // 기존 id 유지
+    
+    if (!wrapper || !targetImg) return;
 
+    // 이미지가 아직 로드되지 않았으면 크기가 0일 수 있으므로 로드 완료를 기다림
+    if (targetImg.naturalWidth === 0) {
+        targetImg.onload = resizeZoomAnnotationCanvas;
+        return;
+    }
+
+    // 캔버스 크기를 이미지와 동일하게 맞춤
+    zoomAnnotationCanvas.width = targetImg.clientWidth;
+    zoomAnnotationCanvas.height = targetImg.clientHeight;
+    
+    // 배경 투명화 및 초기화
+    zoomAnnCtx.clearRect(0, 0, zoomAnnotationCanvas.width, zoomAnnotationCanvas.height);
+}
 
 
 
