@@ -1674,6 +1674,13 @@ function endTeacherAnnotation(docId) {
     // 인터벌 재시작: 전역 변수를 사용하므로 에러가 나지 않습니다.
     if (studentInterval) clearInterval(studentInterval);
     
+	// 2. [추가 부분] 값을 확실하게 다시 가져와서 전역 변수에 동기화
+    // 혹시라도 페이지 내에서 값이 바뀌었을 경우를 대비해 최신 상태를 반영합니다.
+    currentRoomVal = document.getElementById('studentRoomInput').value.trim();
+    currentNameVal = document.getElementById('studentNameInput').value.trim();
+
+	
+
     studentInterval = setInterval(() => {
         // 전역 변수를 참조
         sendStudentSnapshotRelay(currentRoomVal, currentNameVal);
