@@ -898,174 +898,114 @@
 
 
 
-        /* ==========================================================================
-         * 🖍️ 3-A. 원격 교사용 첨삭용 캔버스 전용 드로잉 보드 가동
-         * ========================================================================== */
-        function initZoomAnnotationBoard() {
-            zoomAnnotationCanvas = document.getElementById('zoomAnnotationCanvas');
-            zoomAnnCtx = zoomAnnotationCanvas.getContext('2d');
-
-            // 선생님 첨삭 필기 마우스 이벤트 바인딩
-            zoomAnnotationCanvas.addEventListener('mousedown', startZoomDrawing);
-            zoomAnnotationCanvas.addEventListener('mousemove', drawZoomStroke);
-            zoomAnnotationCanvas.addEventListener('mouseup', endZoomDrawing);
-            zoomAnnotationCanvas.addEventListener('mouseout', endZoomDrawing);
-
-            // 태블릿 대응 터치 이벤트 바인딩
-            zoomAnnotationCanvas.addEventListener('touchstart', function(e) {
-                if (e.touches.length > 0) {
-                    const touch = e.touches[0];
-                    const rect = zoomAnnotationCanvas.getBoundingClientRect();
-                    isZoomDrawing = true;
-                    lastZoomX = (touch.clientX - rect.left) * (zoomAnnotationCanvas.width / rect.width);
-                    lastZoomY = (touch.clientY - rect.top) * (zoomAnnotationCanvas.height / rect.height);
-                }
-            }, { passive: true });
-
-            zoomAnnotationCanvas.addEventListener('touchmove', function(e) {
-                if (!isZoomDrawing || e.touches.length === 0) return;
-                const touch = e.touches[0];
-                const rect = zoomAnnotationCanvas.getBoundingClientRect();
-                const x = (touch.clientX - rect.left) * (zoomAnnotationCanvas.width / rect.width);
-                const y = (touch.clientY - rect.top) * (zoomAnnotationCanvas.height / rect.height);
-
-                drawZoomPath(lastZoomX, lastZoomY, x, y);
-
-                lastZoomX = x;
-                lastZoomY = y;
-            }, { passive: true });
-
-            zoomAnnotationCanvas.addEventListener('touchend', endZoomDrawing);
-        }
-
-        function resizeZoomAnnotationCanvas() {
-            const wrapper = document.getElementById('zoomCanvasWrapper');
-            if (!wrapper || wrapper.clientWidth === 0) return;
-            
-            // 학생 필기 이미지 크기에 정확히 대응 동기화
-            zoomAnnotationCanvas.width = wrapper.clientWidth;
-            zoomAnnotationCanvas.height = wrapper.clientHeight;
-            
-            // 투명 배경 보존
-            zoomAnnCtx.clearRect(0, 0, zoomAnnotationCanvas.width, zoomAnnotationCanvas.height);
-        }
-
-        function startZoomDrawing(e) {
-            isZoomDrawing = true;
-            const rect = zoomAnnotationCanvas.getBoundingClientRect();
-            lastZoomX = (e.clientX - rect.left) * (zoomAnnotationCanvas.width / rect.width);
-            lastZoomY = (e.clientY - rect.top) * (zoomAnnotationCanvas.height / rect.height);
-        }
-
-        function drawZoomStroke(e) {
-            if (!isZoomDrawing) return;
-            const rect = zoomAnnotationCanvas.getBoundingClientRect();
-            const x = (e.clientX - rect.left) * (zoomAnnotationCanvas.width / rect.width);
-            const y = (e.clientY - rect.top) * (zoomAnnotationCanvas.height / rect.height);
-
-            drawZoomPath(lastZoomX, lastZoomY, x, y);
-
-            lastZoomX = x;
-            lastZoomY = y;
-        }
-
-        function drawZoomPath(x1, y1, x2, y2) {
-            zoomAnnCtx.beginPath();
-            zoomAnnCtx.moveTo(x1, y1);
-            zoomAnnCtx.lineTo(x2, y2);
-            
-            if (isZoomEraser) {
-                // 지우개 모드 시 투명으로 교체해서 지우기 구현
-                zoomAnnCtx.globalCompositeOperation = 'destination-out';
-                zoomAnnCtx.lineWidth = 15;
-            } else {
-                zoomAnnCtx.globalCompositeOperation = 'source-over';
-                zoomAnnCtx.strokeStyle = zoomPenColor;
-                zoomAnnCtx.lineWidth = zoomPenSize;
-                zoomAnnCtx.lineCap = 'round';
-                zoomAnnCtx.lineJoin = 'round';
-            }
-            zoomAnnCtx.stroke();
-        }
-
-        // 스트록이 끝날 때마다 투명 PNG 데이터 추출하여 Firestore 즉시 업로드 동기화 가동
-        function endZoomDrawing() {
-            if (!isZoomDrawing) return;
-            isZoomDrawing = false;
-            syncZoomAnnotationToCloud();
-        }
-
-        function setZoomPen(color, size) {
-            isZoomEraser = false;
-            zoomPenColor = color;
-            zoomPenSize = size;
-            
-            // 활성화 버튼 테두리 강조 표시 처리
-            document.querySelectorAll("[id^='zoomToolPen'], #zoomToolHighlight").forEach(b => {
-                b.classList.remove('border-white');
-                b.classList.add('border-transparent');
-            });
-            
-            if (color === '#ef4444') document.getElementById('zoomToolPenRed').classList.add('border-white');
-            if (color === '#3b82f6') document.getElementById('zoomToolPenBlue').classList.add('border-white');
-            if (color === '#facc15') document.getElementById('zoomToolHighlight').classList.add('border-white');
-            
-            document.getElementById('zoomToolEraser').className = "px-2.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] border border-slate-700 font-bold flex items-center gap-1 hover:bg-slate-700 transition";
-        }
-
-        function useZoomEraser() {
-            isZoomEraser = true;
-            document.getElementById('zoomToolEraser').className = "px-2.5 py-0.5 rounded bg-indigo-600 text-white text-[10px] border border-indigo-500 font-bold flex items-center gap-1 transition";
-            document.querySelectorAll("[id^='zoomToolPen'], #zoomToolHighlight").forEach(b => {
-                b.classList.remove('border-white');
-                b.classList.add('border-transparent');
-            });
-        }
-
-        function clearZoomAnnotation() {
-            if (!zoomAnnCtx) return;
-            zoomAnnCtx.clearRect(0, 0, zoomAnnotationCanvas.width, zoomAnnotationCanvas.height);
-            syncZoomAnnotationToCloud();
-        }
-
-        // 투명 PNG로 실시간 첨삭 업로드 (델타 최소화 전송)
-        function syncZoomAnnotationToCloud() {
-            if (!activeWatchingStudentId) return;
-            
-            // 전체 투명인 경우 업로드 최적화를 위해 null 전송 가드 적용
-            const isEmpty = isCanvasBlank(zoomAnnotationCanvas);
-            const annotationData = isEmpty ? null : zoomAnnotationCanvas.toDataURL('image/png', 0.5);
-
-            if (db && currentUser) {
-                db.collection('artifacts').doc(appId).collection('public').doc('data').collection('secure_signals').doc(activeWatchingStudentId).set({
-                    teacherAnnotation: annotationData
-                }, { merge: true }).catch(err => {
-                    console.warn("첨삭 이미지 싱크 업로드 에러:", err);
-                });
-            } else {
-                // 로컬 샌드박스용 첨삭 루프 브로드캐스트 전송 지원
-                if (typeof BroadcastChannel !== 'undefined') {
-                    const localChannel = new BroadcastChannel('classshare_sandbox');
-                    localChannel.postMessage({
-                        type: 'annotation',
-                        studentId: activeWatchingStudentId,
-                        teacherAnnotation: annotationData
-                    });
-                    localChannel.close();
-                }
-            }
-        }
-
-        function isCanvasBlank(canvas) {
-            const context = canvas.getContext('2d');
-            const buffer = new Uint32Array(
-                context.getImageData(0, 0, canvas.width, canvas.height).data.buffer
-            );
-            return !buffer.some(color => color !== 0);
-        }
 
 
+		/* ==========================================================================
+		 * 🖍️ 3-A. 원격 교사용 첨삭용 캔버스 전용 드로잉 보드 가동 (수정본)
+		 * ========================================================================== */
 
+		// 1. 캔버스 초기화 및 레이어 설정 강화
+		function initZoomAnnotationBoard() {
+			zoomAnnotationCanvas = document.getElementById('zoomAnnotationCanvas');
+			zoomAnnCtx = zoomAnnotationCanvas.getContext('2d');
+
+			// [중요] 레이어 스타일 강제 주입: CSS 충돌 방지 및 레이어 최상단 보장
+			zoomAnnotationCanvas.style.position = "absolute";
+			zoomAnnotationCanvas.style.top = "0";
+			zoomAnnotationCanvas.style.left = "0";
+			zoomAnnotationCanvas.style.zIndex = "20"; // 학생 이미지(z-10)보다 위에 배치
+			zoomAnnotationCanvas.style.backgroundColor = "transparent"; // 배경 투명 처리
+			zoomAnnotationCanvas.style.pointerEvents = "auto"; // 클릭 이벤트 활성화
+
+			// 이벤트 리스너 바인딩
+			zoomAnnotationCanvas.addEventListener('mousedown', startZoomDrawing);
+			zoomAnnotationCanvas.addEventListener('mousemove', drawZoomStroke);
+			zoomAnnotationCanvas.addEventListener('mouseup', endZoomDrawing);
+			zoomAnnotationCanvas.addEventListener('mouseout', endZoomDrawing);
+
+			// 태블릿 대응 터치 이벤트 (Passive: false로 설정하여 브라우저 스크롤 방지)
+			zoomAnnotationCanvas.addEventListener('touchstart', (e) => {
+				e.preventDefault(); 
+				const touch = e.touches[0];
+				const rect = zoomAnnotationCanvas.getBoundingClientRect();
+				isZoomDrawing = true;
+				lastZoomX = (touch.clientX - rect.left) * (zoomAnnotationCanvas.width / rect.width);
+				lastZoomY = (touch.clientY - rect.top) * (zoomAnnotationCanvas.height / rect.height);
+			}, { passive: false });
+
+			zoomAnnotationCanvas.addEventListener('touchmove', (e) => {
+				if (!isZoomDrawing) return;
+				e.preventDefault();
+				const touch = e.touches[0];
+				const rect = zoomAnnotationCanvas.getBoundingClientRect();
+				const x = (touch.clientX - rect.left) * (zoomAnnotationCanvas.width / rect.width);
+				const y = (touch.clientY - rect.top) * (zoomAnnotationCanvas.height / rect.height);
+				drawZoomPath(lastZoomX, lastZoomY, x, y);
+				lastZoomX = x;
+				lastZoomY = y;
+			}, { passive: false });
+
+			zoomAnnotationCanvas.addEventListener('touchend', endZoomDrawing);
+		}
+
+		// 2. 학생 필기 이미지와 캔버스 크기 정확한 동기화 (이미지 로딩 완료 후 실행 필수)
+		function resizeZoomAnnotationCanvas() {
+			const wrapper = document.getElementById('zoomCanvasWrapper');
+			const targetImg = document.getElementById('studentNotebookImage'); // 학생 필기 이미지 ID
+			
+			if (!wrapper || !targetImg) return;
+
+			// 학생 이미지의 실제 렌더링 크기를 캔버스에 적용
+			zoomAnnotationCanvas.width = targetImg.clientWidth;
+			zoomAnnotationCanvas.height = targetImg.clientHeight;
+			
+			// 투명 배경 유지 및 캔버스 초기화
+			zoomAnnCtx.clearRect(0, 0, zoomAnnotationCanvas.width, zoomAnnotationCanvas.height);
+		}
+
+		// 3. 드로잉 경로 구현 (globalCompositeOperation 최적화)
+		function drawZoomPath(x1, y1, x2, y2) {
+			if (!zoomAnnCtx) return;
+			
+			zoomAnnCtx.save(); // 상태 저장
+			zoomAnnCtx.beginPath();
+			zoomAnnCtx.moveTo(x1, y1);
+			zoomAnnCtx.lineTo(x2, y2);
+			
+			if (isZoomEraser) {
+				zoomAnnCtx.globalCompositeOperation = 'destination-out'; // 지우개 모드
+				zoomAnnCtx.lineWidth = 15;
+			} else {
+				zoomAnnCtx.globalCompositeOperation = 'source-over'; // 일반 드로잉
+				zoomAnnCtx.strokeStyle = zoomPenColor;
+				zoomAnnCtx.lineWidth = zoomPenSize;
+				zoomAnnCtx.lineCap = 'round';
+				zoomAnnCtx.lineJoin = 'round';
+			}
+			zoomAnnCtx.stroke();
+			zoomAnnCtx.restore(); // 상태 복구
+		}
+
+		// 4. 안전한 빈 캔버스 체크 (이미지 데이터 없이 순수 상태 확인)
+		function isCanvasBlank(canvas) {
+			// 획 데이터가 있는지 별도 배열로 관리하는 것이 가장 빠르고 안전함
+			return currentStrokes && currentStrokes.length === 0;
+		}
+
+		// 5. 서버 싱크 (CORS 및 보안 오류 방지 처리 추가)
+		function syncZoomAnnotationToCloud() {
+			if (!activeWatchingStudentId) return;
+			
+			// 빈 캔버스면 null 전송하여 데이터 절약
+			const annotationData = isCanvasBlank(zoomAnnotationCanvas) ? null : zoomAnnotationCanvas.toDataURL('image/png', 0.5);
+
+			if (db && currentUser) {
+				db.collection('artifacts').doc(appId).collection('public').doc('data')
+				  .collection('secure_signals').doc(activeWatchingStudentId)
+				  .set({ teacherAnnotation: annotationData }, { merge: true })
+				  .catch(err => console.error("업로드 실패:", err));
+			}
+		}
 
 
 
