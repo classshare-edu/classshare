@@ -46,6 +46,27 @@
             z-index: 50;
             touch-action: none;
         }
+
+#zoomCanvasWrapper {
+    position: relative; /* 자식 요소들의 기준점 */
+}
+
+#zoomRemoteImage {
+    z-index: 5; /* 이미지는 뒤에 */
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+#zoomAnnotationCanvas {
+    z-index: 10; /* 캔버스는 무조건 앞에 */
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background-color: transparent !important; /* 배경 투명 */
+}
+
     </style>
 </head>
 <body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col">
