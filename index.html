@@ -3,12 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ClassShare LIVE - 실시간 다중 타일 관제 포털</title>
+    <title>ClassShare LIVE - 실시간 다중 타일 관제 및 원격 첨삭 포털</title>
     <!-- Tailwind CSS 및 FontAwesome 아이콘 CDN 로드 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
-        /* 기본 스크롤 허용 (모바일/태블릿 대응) - 데스크톱에서는 락(Lock) 처리 */
         body, html {
             margin: 0;
             padding: 0;
@@ -20,7 +19,7 @@
         }
         @media (min-width: 1024px) {
             body, html {
-                overflow: hidden; /* 데스크톱에서는 스크롤바가 생기지 않는 구조 */
+                overflow: hidden; /* 데스크톱에서는 전체 스크롤바 가두기 */
             }
         }
         .bg-premium-dark {
@@ -31,7 +30,6 @@
             backdrop-filter: blur(14px);
             border: 1px solid rgba(255, 255, 255, 0.08);
         }
-        /* 그림판 캔버스 영역에만 터치 차단을 걸어, 모바일 기기 스크롤과 필기 동작이 엉키지 않게 보호 */
         canvas {
             touch-action: none;
             cursor: crosshair;
@@ -43,7 +41,6 @@
         .student-alert-active {
             animation: warn-flicker 1.8s infinite;
         }
-        /* 드래그 가능 엘리먼트 그랩 마커 */
         .draggable-widget {
             position: absolute;
             z-index: 50;
@@ -58,7 +55,7 @@
 
     <!-- 설정 모달 (Firebase 동적 연동용) -->
     <div id="settingsModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center hidden">
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-lg mx-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-lg mx-4 text-left">
             <div class="flex justify-between items-center mb-3">
                 <h3 class="text-base font-bold text-white flex items-center">
                     <i class="fa-solid fa-cloud-arrow-up text-indigo-400 mr-2"></i> 클라우드 DB 연동 설정
@@ -66,7 +63,7 @@
                 <button onclick="toggleSettings(false)" class="text-slate-400 hover:text-white text-xl">&times;</button>
             </div>
             <p class="text-xs text-slate-400 mb-4 leading-relaxed">
-                파이어베이스 실시간 교환망을 사용해 딜레이 없는 화면 동기화를 구현할 수 있습니다. 설정을 입력하지 않으면 시스템에서 기본 제공하는 데모 중계망으로 즉시 가동됩니다.
+                파이어베이스 실시간 교환망을 사용해 딜레이 없는 화면 동기화를 구현할 수 있습니다.
             </p>
             <div class="space-y-3">
                 <div>
@@ -81,7 +78,7 @@
         </div>
     </div>
 
-    <!-- 학생 초대 정보 모달 (QR 및 링크 연동) -->
+    <!-- 학생 초대 정보 모달 -->
     <div id="inviteModal" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-[60] flex items-center justify-center hidden">
         <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-md mx-4 text-center">
             <div class="flex justify-between items-center mb-4 text-left">
@@ -90,12 +87,11 @@
                 </h3>
                 <button onclick="toggleInviteModal(false)" class="text-slate-400 hover:text-white text-2xl">&times;</button>
             </div>
-            <p class="text-[11px] text-slate-400 mb-4">
-                학생 태블릿의 기본 카메라를 켜서 아래 QR 코드를 비추거나, 링크를 공유하면 <strong class="text-indigo-400">복잡한 설정 정보 입력 없이 즉시 연결</strong>됩니다!
+            <p class="text-[11px] text-slate-400 mb-4 leading-relaxed">
+                학생 태블릿의 기본 카메라를 켜서 아래 QR 코드를 비추면 즉시 동기화 연결됩니다!
             </p>
             
             <div class="bg-white p-4 rounded-2xl inline-block mb-4 shadow-xl">
-                <!-- QR 코드 주입 -->
                 <img id="inviteQrImage" class="w-48 h-48 mx-auto" src="" alt="연결 QR 코드">
             </div>
 
@@ -111,43 +107,59 @@
         </div>
     </div>
 
-    <!-- 돋보기 상세 팝업 모달 (필기화면 차단 버그 전면 수정 완료) -->
-    <div id="studentDetailZoomModal" class="fixed inset-0 bg-slate-950/95 z-50 flex flex-col justify-between hidden">
-        <!-- 돋보기 헤더바 -->
-        <div class="bg-slate-900 border-b border-slate-800 px-6 py-4 flex items-center justify-between">
+    <!-- 돋보기 상세 팝업 모달 (+ 원격 빨간펜 첨삭 보드 시스템 탑재) -->
+    <div id="studentDetailZoomModal" class="fixed inset-0 bg-slate-950/98 z-50 flex flex-col justify-between hidden">
+        <!-- 돋보기 헤더바 및 첨삭 필기 도구 통합제어부 -->
+        <div class="bg-slate-900 border-b border-slate-800 px-6 py-3 flex flex-wrap items-center justify-between gap-4">
             <div class="flex items-center space-x-3">
                 <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <h3 class="text-sm font-bold text-white">현미경 상세 관제: <span id="zoomStudentName" class="text-indigo-400">학생 이름</span></h3>
-                <span id="zoomQualityBadge" class="bg-slate-950 border border-slate-800 text-emerald-400 text-[10px] px-2.5 py-0.5 rounded-full font-bold">2채널 실시간 동기화</span>
+                <h3 class="text-sm font-bold text-white">상세 밀착 교정: <span id="zoomStudentName" class="text-indigo-400">학생 이름</span></h3>
+                
+                <!-- 원격 첨삭 필기 툴바 -->
+                <div class="flex items-center bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 space-x-2">
+                    <span class="text-[10px] text-slate-400 font-bold mr-1"><i class="fa-solid fa-file-signature text-rose-500"></i> 첨삭 도구:</span>
+                    <button id="zoomToolPenRed" onclick="setZoomPen('#ef4444', 4)" class="w-6 h-6 rounded-full bg-red-500 border-2 border-white transition transform active:scale-90" title="빨간펜"></button>
+                    <button id="zoomToolPenBlue" onclick="setZoomPen('#3b82f6', 4)" class="w-6 h-6 rounded-full bg-blue-500 border-2 border-transparent transition transform active:scale-90" title="파란펜"></button>
+                    <button id="zoomToolHighlight" onclick="setZoomPen('#facc15', 14)" class="w-6 h-6 rounded-full bg-yellow-400 border-2 border-transparent transition transform active:scale-90" title="노란 형광펜"></button>
+                    <button id="zoomToolEraser" onclick="useZoomEraser()" class="px-2.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] border border-slate-700 font-bold flex items-center gap-1 hover:bg-slate-700 transition">
+                        <i class="fa-solid fa-eraser"></i> 지우개
+                    </button>
+                    <button onclick="clearZoomAnnotation()" class="px-2.5 py-0.5 rounded bg-rose-950/40 text-red-400 text-[10px] border border-red-900/30 font-bold flex items-center gap-1 hover:bg-rose-900/40 transition">
+                        <i class="fa-solid fa-trash-can"></i> 전체 지우기
+                    </button>
+                </div>
             </div>
+            
             <div class="flex items-center space-x-3">
-                <button onclick="forceTeacherImageFallback()" class="text-xs bg-amber-600/20 border border-amber-600/30 text-amber-400 px-3 py-1.5 rounded-xl font-bold hover:bg-amber-600/40 transition">
-                    카메라 끄기 원격 유도
-                </button>
-                <button onclick="closeStudentDetailZoom()" class="text-slate-400 hover:text-white text-sm bg-slate-800 hover:bg-slate-700 px-4 py-1.5 rounded-xl transition">
-                    <i class="fa-solid fa-xmark mr-1"></i> 관제 닫기
+                <span class="text-[10px] bg-slate-950 text-indigo-400 px-3 py-1.5 border border-slate-800 rounded-xl leading-relaxed">
+                    <strong class="text-white">실시간 원격 첨삭 중:</strong> 화면 위에 바로 글씨를 쓰시면 학생 태블릿에 즉시 나타납니다.
+                </span>
+                <button onclick="closeStudentDetailZoom()" class="text-slate-400 hover:text-white text-xs bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl transition font-bold">
+                    <i class="fa-solid fa-xmark mr-1"></i> 첨삭 종료 및 닫기
                 </button>
             </div>
         </div>
         
-        <!-- 대형 관제 뷰어 중심부 (검은색 박스 교정 및 필기 무조건 노출) -->
-        <div class="relative flex-grow bg-slate-900 flex items-center justify-center p-4 overflow-hidden">
-            <!-- 드로잉 미러링 이미지 (절대로 가려지지 않고 항상 필기화면 출력) -->
-            <img id="zoomRemoteImage" class="max-w-full max-h-full object-contain shadow-2xl rounded-lg bg-white" alt="실시간 연습장 확대">
+        <!-- 대형 관제 뷰어 중심부 (필기 및 첨삭 듀얼 캔버스 포개기 레이아웃) -->
+        <div class="relative flex-grow bg-slate-950 flex items-center justify-center p-4 overflow-hidden">
+            <div class="relative max-w-full max-h-[80vh] aspect-[4/3] bg-white rounded-2xl shadow-2xl overflow-hidden" id="zoomCanvasWrapper">
+                <!-- 1층: 학생이 보내는 실시간 필기장 화면 (순백색 일치) -->
+                <img id="zoomRemoteImage" class="absolute inset-0 w-full h-full object-contain bg-white select-none pointer-events-none" alt="실시간 연습장 확대">
+                
+                <!-- 2층: 선생님이 학생 화면 위에 덧그리는 첨삭 투명 캔버스 레이어 -->
+                <canvas id="zoomAnnotationCanvas" class="absolute inset-0 w-full h-full z-10 bg-transparent pointer-events-auto"></canvas>
+            </div>
 
-            <!-- 돋보기 내 드래그 가능한 학생 전면 캠 오버레이 (WebRTC 영상은 오직 이곳으로만 연결) -->
+            <!-- 돋보기 내 드래그 가능한 학생 전면 캠 오버레이 -->
             <div id="zoomCameraContainer" class="draggable-widget w-72 aspect-video bg-slate-900/95 border-2 border-indigo-500 rounded-2xl overflow-hidden shadow-2xl" style="top: 24px; right: 24px;">
-                <!-- 드래그 전용 손잡이 헤더 -->
                 <div id="zoomCameraHeader" class="bg-slate-950 px-3 py-1.5 text-[9px] font-bold text-slate-400 flex justify-between items-center cursor-move select-none border-b border-slate-800">
                     <span><i class="fa-solid fa-arrows-alt mr-1"></i> 드래그하여 이동 (태블릿 캡처캠)</span>
                     <span class="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
                 </div>
                 <div class="relative w-full h-[calc(100%-25px)] bg-black" id="zoomCameraBody">
-                    <!-- 우회 이미지 프레임 수신처 -->
                     <div id="zoomCameraImageFrame" class="w-full h-full flex items-center justify-center text-slate-600 text-[10px]">
                         <i class="fa-solid fa-video-slash mb-1 mr-1"></i> 캠 대기중
                     </div>
-                    <!-- WebRTC 다이렉트 고주사율 뷰어 수신처 -->
                     <video id="zoomRemoteCamera" autoplay playsinline class="hidden w-full h-full object-cover scale-x-[-1]"></video>
                 </div>
             </div>
@@ -195,7 +207,7 @@
         </div>
     </header>
 
-    <!-- 메인 가용 컨테이너 (반응형 대응 및 스크롤 허용) -->
+    <!-- 메인 가용 컨테이너 -->
     <main class="flex-grow p-3 md:p-6 max-w-7xl mx-auto w-full flex flex-col justify-start lg:justify-center overflow-y-auto lg:overflow-hidden">
 
         <!-- ==========================================
@@ -236,9 +248,13 @@
                     </div>
                 </div>
 
-                <!-- 연습장 드로잉 영역 -->
+                <!-- 연습장 드로잉 영역 (+ 선생님 실시간 원격 첨삭 전용 레이어 바인딩) -->
                 <div class="relative flex-grow bg-white min-h-[300px]" id="boardContainer">
-                    <canvas id="drawingCanvas" class="absolute inset-0 w-full h-full bg-white"></canvas>
+                    <!-- 학생 자체 드로잉용 하단 캔버스 -->
+                    <canvas id="drawingCanvas" class="absolute inset-0 w-full h-full bg-white z-0"></canvas>
+                    
+                    <!-- 선생님의 실시간 첨삭(빨간펜 등) 오버레이 레이어 (항상 정확히 정대응 오버레이) -->
+                    <img id="studentAnnotationOverlay" class="absolute inset-0 w-full h-full object-contain pointer-events-none z-10 hidden" alt="선생님 실시간 첨삭 피드백">
 
                     <!-- 학생용 드래그 가능한 플로팅 카메라 위젯 -->
                     <div id="studentFloatingCamera" class="draggable-widget w-40 aspect-video bg-slate-900 border border-indigo-500 rounded-xl overflow-hidden shadow-xl" style="top: 20px; left: 20px;">
@@ -259,13 +275,12 @@
 
             <!-- 오른쪽: 학생용 제어판 -->
             <div class="lg:col-span-3 flex flex-col justify-start lg:justify-between gap-4 h-auto lg:h-full mt-4 lg:mt-0">
-                <!-- 관제 컨트롤보드 -->
-                <div class="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex-grow flex flex-col justify-between gap-5 shadow-lg">
+                <div class="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex-grow flex flex-col justify-between gap-5 shadow-lg text-left">
                     <div class="space-y-4">
                         <div>
                             <span class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">클라우드 룸 연동</span>
                             <h3 class="text-lg font-black text-white mt-0.5">학생 관제 활성화</h3>
-                            <p class="text-[10px] text-slate-400 mt-1">※ 왼쪽 필기판 위의 카메라 창은 원하는 곳으로 손가락으로 끌어서 옮기실 수 있습니다.</p>
+                            <p class="text-[10px] text-slate-400 mt-1">※ 왼쪽 필기판 위의 카메라 창은 원하는 곳으로 자유롭게 끌어 옮길 수 있습니다.</p>
                         </div>
 
                         <div class="space-y-3">
@@ -282,7 +297,7 @@
 
                     <div class="space-y-2 pt-4 border-t border-slate-800/80">
                         <div class="text-[10px] text-slate-500 leading-relaxed mb-1">
-                            <i class="fa-solid fa-lock text-indigo-500"></i> 다른 탭으로 이동 시 즉시 선생님 화면에 경고가 통보됩니다.
+                            <i class="fa-solid fa-lock text-indigo-500"></i> 다른 탭으로 이동 시 즉시 선생님 화면에 경고등이 전송됩니다.
                         </div>
                         <button id="btnStudentStart" onclick="startStudentBroadcasting()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-lg transition">
                             실시간 감시 송출 시작
@@ -298,8 +313,8 @@
         <!-- ==========================================
              [모드 2] 선생님용 다중 타일 관제 대시보드
              ========================================== -->
-        <div id="teacherSection" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch h-auto lg:h-full overflow-visible lg:overflow-hidden">
-            <!-- 왼쪽: 실시간 다중 학생 타일보드 (정사각형 기하 타일 개편) -->
+        <div id="teacherSection" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch h-auto lg:h-full overflow-visible lg:overflow-hidden text-left">
+            <!-- 왼쪽: 실시간 다중 학생 타일보드 (순백색 결합 정사각형 타일링 + 스크롤 보장) -->
             <div class="lg:col-span-8 flex flex-col gap-4 h-[65vh] lg:h-auto min-h-[450px]">
                 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex-grow flex flex-col overflow-hidden">
                     <div class="flex items-center justify-between mb-3 pb-2 border-b border-slate-800/60">
@@ -310,15 +325,15 @@
                         <span id="tileCounter" class="text-[10px] bg-slate-950 text-indigo-400 font-mono px-2.5 py-0.5 rounded-full border border-slate-800">활성 0대</span>
                     </div>
 
-                    <!-- 타일들이 채워지는 실제 컨테이너 (정사각형 최적화 레이아웃) -->
-                    <div id="teacherTileBoard" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto flex-grow pr-1 py-1 max-h-[58vh]">
+                    <!-- 원장님 요청: 학생 수가 늘어나도 안전하게 다중 행 스크롤되도록 고정 가이딩 주입 -->
+                    <div id="teacherTileBoard" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto flex-grow pr-1.5 py-1 max-h-[58vh]">
                         <div id="teacherNoStreamPlaceholder" class="col-span-full h-full flex flex-col items-center justify-center text-center p-6 my-auto">
                             <div class="bg-slate-950 p-4 rounded-full text-slate-700 border border-slate-800 mb-3 animate-pulse">
                                 <i class="fa-solid fa-table-cells-large text-3xl"></i>
                             </div>
                             <h4 class="text-xs font-bold text-slate-300">실시간 다중 모니터링 대기 중</h4>
                             <p class="text-[10px] text-slate-500 max-w-sm mt-1 leading-relaxed">
-                                오른쪽 초대 도구를 통해 태블릿을 연동해 주세요. 학생이 송출을 시작하면 이 자리에 각 학생의 연습장과 얼굴이 타일로 자동 구성되어 동시에 중계됩니다.
+                                오른쪽 초대 도구를 통해 태블릿을 연동해 주세요. 학생이 송출을 시작하면 이 자리에 각 학생의 연습장과 얼굴이 정사각형 타일로 중계됩니다.
                             </p>
                         </div>
                     </div>
@@ -327,7 +342,7 @@
 
             <!-- 우측: 대기 학생 목록 및 실시간 이탈 경보망 -->
             <div class="lg:col-span-4 flex flex-col gap-4 h-auto lg:h-full mt-4 lg:mt-0">
-                <!-- 실시간 접속/대기 학생 리스트 (최대 5명 자동 내부 스크롤 보호 규격) -->
+                <!-- 실시간 접속/대기 학생 리스트 (최대 5명 자동 내부 스크롤 보호 규격 및 강제 퇴장 버튼 탑재) -->
                 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col shadow-xl">
                     <div class="flex items-center justify-between mb-3 pb-2 border-b border-slate-800/60">
                         <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">접속 학생 리스트</span>
@@ -387,7 +402,7 @@
     <!-- 푸터 -->
     <footer class="border-t border-slate-900 bg-slate-950 px-6 py-3.5 text-xs text-slate-500">
         <div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-2">
-            <p>© 2026 ClassShare SECURE - 100% 무중단 하이브리드 중계 기술 통합</p>
+            <p>© 2026 ClassShare SECURE - 100% 무중단 원격 첨삭 기술 최적화 버전</p>
             <p class="text-[10px] text-slate-600">Single File Pure Portal Engine</p>
         </div>
     </footer>
@@ -403,7 +418,7 @@
         let db = null;
         let firebaseApp = null;
         let currentUser = null;
-        let activeRole = 'student'; // 'student' or 'teacher'
+        let activeRole = 'student'; 
         let studentPc = null;
         let teacherPc = null;
         
@@ -417,6 +432,16 @@
         let penSize = 4;
         let isEraserMode = false;
 
+        // 원격 돋보기 첨삭 캔버스 전역 변수
+        let zoomAnnotationCanvas = null;
+        let zoomAnnCtx = null;
+        let isZoomDrawing = false;
+        let lastZoomX = 0;
+        let lastZoomY = 0;
+        let zoomPenColor = '#ef4444'; // 빨간색이 기본
+        let zoomPenSize = 4;
+        let isZoomEraser = false;
+
         // 미디어 스트림 홀더
         let studentCamStream = null;
         let studentInterval = null;
@@ -428,10 +453,10 @@
         let teacherQueueListener = null;
         let activeWatchingStudentId = "";
         
-        // 주기적 오프라인 보정 타이머 (onSnapshot 외부에서도 청소 가동)
+        // 주기적 오프라인 보정 타이머
         let queueCleanupInterval = null;
 
-        // 원장님 깜빡임 방지용 및 이탈 방지용 한계치 (12초로 최적화 단축하여 유령 퇴출 신속화)
+        // 원활한 정리 검사를 위한 최적화 주기 (12초)
         const HEARTBEAT_TIMEOUT_MS = 12000; 
 
         // STUN/TURN 구성
@@ -475,6 +500,7 @@
             }
 
             initDrawingBoard();
+            initZoomAnnotationBoard(); // 교사 돋보기 첨삭 보드 초기화 추가
 
             tryLoadFirebase().then(() => {
                 if (paramRole === 'teacher') {
@@ -536,7 +562,7 @@
             }
         }
 
-        // --- 드래그앤드롭 좌표 보정 유틸리티 (Mouse & Touch 완벽 지원) ---
+        // --- 드래그앤드롭 좌표 보정 유틸리티 ---
         function makeElementDraggable(elm, handle) {
             let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
             if (!elm || !handle) return;
@@ -622,7 +648,7 @@
             }
         }
 
-        // --- 파이어베이스 자가 구동 엔진 (비동기 안정성 확보 및 명확한 에러 표시) ---
+        // --- 파이어베이스 자가 구동 엔진 ---
         async function tryLoadFirebase() {
             let config = null;
             let source = "none";
@@ -669,7 +695,6 @@
                     }
                     db = firebaseApp.firestore();
 
-                    // 익명 로그인 가동 (Rule 3)
                     writeLog("파이어베이스 인증 채널을 연결 중...", "info");
                     let userCredential;
                     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -679,7 +704,6 @@
                     }
                     currentUser = userCredential.user;
                     
-                    // 연결 성공 UI 정합 처리
                     document.getElementById('networkIndicatorLed').className = "w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse";
                     document.getElementById('networkModeText').innerText = "클라우드 무선 관제망 개통";
                     document.getElementById('cloudWarningBanner').classList.add('hidden');
@@ -713,7 +737,6 @@
             writeLog("로컬 통신 모드입니다. 다른 단독 태블릿 기기들과 무선 연동하려면 [⚙️] 설정 아이콘을 눌러 파이어베이스 키를 등록해 주세요.", "warn");
         }
 
-        // --- 학생/선생님 화면 제어 전환 모듈 (스크롤 락 해제 및 보정 적용) ---
         function switchSystemRole(role) {
             activeRole = role;
 
@@ -737,7 +760,7 @@
         }
 
         /* ==========================================================================
-         * 🎨 3. 칠판 그리기 연습장 시스템 (모바일 touch 좌표 완벽 동기화형)
+         * 🎨 3. 칠판 그리기 연습장 시스템 (학생 전용 필기장)
          * ========================================================================== */
         function initDrawingBoard() {
             drawingCanvas = document.getElementById('drawingCanvas');
@@ -872,7 +895,173 @@
         }
 
         /* ==========================================================================
-         * 🎓 4. 학생 실시간 송출 엔진 (WebRTC + 초경량 우회 전송 통합)
+         * 🖍️ 3-A. 원격 교사용 첨삭용 캔버스 전용 드로잉 보드 가동
+         * ========================================================================== */
+        function initZoomAnnotationBoard() {
+            zoomAnnotationCanvas = document.getElementById('zoomAnnotationCanvas');
+            zoomAnnCtx = zoomAnnotationCanvas.getContext('2d');
+
+            // 선생님 첨삭 필기 마우스 이벤트 바인딩
+            zoomAnnotationCanvas.addEventListener('mousedown', startZoomDrawing);
+            zoomAnnotationCanvas.addEventListener('mousemove', drawZoomStroke);
+            zoomAnnotationCanvas.addEventListener('mouseup', endZoomDrawing);
+            zoomAnnotationCanvas.addEventListener('mouseout', endZoomDrawing);
+
+            // 태블릿 대응 터치 이벤트 바인딩
+            zoomAnnotationCanvas.addEventListener('touchstart', function(e) {
+                if (e.touches.length > 0) {
+                    const touch = e.touches[0];
+                    const rect = zoomAnnotationCanvas.getBoundingClientRect();
+                    isZoomDrawing = true;
+                    lastZoomX = (touch.clientX - rect.left) * (zoomAnnotationCanvas.width / rect.width);
+                    lastZoomY = (touch.clientY - rect.top) * (zoomAnnotationCanvas.height / rect.height);
+                }
+            }, { passive: true });
+
+            zoomAnnotationCanvas.addEventListener('touchmove', function(e) {
+                if (!isZoomDrawing || e.touches.length === 0) return;
+                const touch = e.touches[0];
+                const rect = zoomAnnotationCanvas.getBoundingClientRect();
+                const x = (touch.clientX - rect.left) * (zoomAnnotationCanvas.width / rect.width);
+                const y = (touch.clientY - rect.top) * (zoomAnnotationCanvas.height / rect.height);
+
+                drawZoomPath(lastZoomX, lastZoomY, x, y);
+
+                lastZoomX = x;
+                lastZoomY = y;
+            }, { passive: true });
+
+            zoomAnnotationCanvas.addEventListener('touchend', endZoomDrawing);
+        }
+
+        function resizeZoomAnnotationCanvas() {
+            const wrapper = document.getElementById('zoomCanvasWrapper');
+            if (!wrapper || wrapper.clientWidth === 0) return;
+            
+            // 학생 필기 이미지 크기에 정확히 대응 동기화
+            zoomAnnotationCanvas.width = wrapper.clientWidth;
+            zoomAnnotationCanvas.height = wrapper.clientHeight;
+            
+            // 투명 배경 보존
+            zoomAnnCtx.clearRect(0, 0, zoomAnnotationCanvas.width, zoomAnnotationCanvas.height);
+        }
+
+        function startZoomDrawing(e) {
+            isZoomDrawing = true;
+            const rect = zoomAnnotationCanvas.getBoundingClientRect();
+            lastZoomX = (e.clientX - rect.left) * (zoomAnnotationCanvas.width / rect.width);
+            lastZoomY = (e.clientY - rect.top) * (zoomAnnotationCanvas.height / rect.height);
+        }
+
+        function drawZoomStroke(e) {
+            if (!isZoomDrawing) return;
+            const rect = zoomAnnotationCanvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (zoomAnnotationCanvas.width / rect.width);
+            const y = (e.clientY - rect.top) * (zoomAnnotationCanvas.height / rect.height);
+
+            drawZoomPath(lastZoomX, lastZoomY, x, y);
+
+            lastZoomX = x;
+            lastZoomY = y;
+        }
+
+        function drawZoomPath(x1, y1, x2, y2) {
+            zoomAnnCtx.beginPath();
+            zoomAnnCtx.moveTo(x1, y1);
+            zoomAnnCtx.lineTo(x2, y2);
+            
+            if (isZoomEraser) {
+                // 지우개 모드 시 투명으로 교체해서 지우기 구현
+                zoomAnnCtx.globalCompositeOperation = 'destination-out';
+                zoomAnnCtx.lineWidth = 15;
+            } else {
+                zoomAnnCtx.globalCompositeOperation = 'source-over';
+                zoomAnnCtx.strokeStyle = zoomPenColor;
+                zoomAnnCtx.lineWidth = zoomPenSize;
+                zoomAnnCtx.lineCap = 'round';
+                zoomAnnCtx.lineJoin = 'round';
+            }
+            zoomAnnCtx.stroke();
+        }
+
+        // 스트록이 끝날 때마다 투명 PNG 데이터 추출하여 Firestore 즉시 업로드 동기화 가동
+        function endZoomDrawing() {
+            if (!isZoomDrawing) return;
+            isZoomDrawing = false;
+            syncZoomAnnotationToCloud();
+        }
+
+        function setZoomPen(color, size) {
+            isZoomEraser = false;
+            zoomPenColor = color;
+            zoomPenSize = size;
+            
+            // 활성화 버튼 테두리 강조 표시 처리
+            document.querySelectorAll("[id^='zoomToolPen'], #zoomToolHighlight").forEach(b => {
+                b.classList.remove('border-white');
+                b.classList.add('border-transparent');
+            });
+            
+            if (color === '#ef4444') document.getElementById('zoomToolPenRed').classList.add('border-white');
+            if (color === '#3b82f6') document.getElementById('zoomToolPenBlue').classList.add('border-white');
+            if (color === '#facc15') document.getElementById('zoomToolHighlight').classList.add('border-white');
+            
+            document.getElementById('zoomToolEraser').className = "px-2.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] border border-slate-700 font-bold flex items-center gap-1 hover:bg-slate-700 transition";
+        }
+
+        function useZoomEraser() {
+            isZoomEraser = true;
+            document.getElementById('zoomToolEraser').className = "px-2.5 py-0.5 rounded bg-indigo-600 text-white text-[10px] border border-indigo-500 font-bold flex items-center gap-1 transition";
+            document.querySelectorAll("[id^='zoomToolPen'], #zoomToolHighlight").forEach(b => {
+                b.classList.remove('border-white');
+                b.classList.add('border-transparent');
+            });
+        }
+
+        function clearZoomAnnotation() {
+            if (!zoomAnnCtx) return;
+            zoomAnnCtx.clearRect(0, 0, zoomAnnotationCanvas.width, zoomAnnotationCanvas.height);
+            syncZoomAnnotationToCloud();
+        }
+
+        // 투명 PNG로 실시간 첨삭 업로드 (델타 최소화 전송)
+        function syncZoomAnnotationToCloud() {
+            if (!activeWatchingStudentId) return;
+            
+            // 전체 투명인 경우 업로드 최적화를 위해 null 전송 가드 적용
+            const isEmpty = isCanvasBlank(zoomAnnotationCanvas);
+            const annotationData = isEmpty ? null : zoomAnnotationCanvas.toDataURL('image/png', 0.5);
+
+            if (db && currentUser) {
+                db.collection('artifacts').doc(appId).collection('public').doc('data').collection('secure_signals').doc(activeWatchingStudentId).set({
+                    teacherAnnotation: annotationData
+                }, { merge: true }).catch(err => {
+                    console.warn("첨삭 이미지 싱크 업로드 에러:", err);
+                });
+            } else {
+                // 로컬 샌드박스용 첨삭 루프 브로드캐스트 전송 지원
+                if (typeof BroadcastChannel !== 'undefined') {
+                    const localChannel = new BroadcastChannel('classshare_sandbox');
+                    localChannel.postMessage({
+                        type: 'annotation',
+                        studentId: activeWatchingStudentId,
+                        teacherAnnotation: annotationData
+                    });
+                    localChannel.close();
+                }
+            }
+        }
+
+        function isCanvasBlank(canvas) {
+            const context = canvas.getContext('2d');
+            const buffer = new Uint32Array(
+                context.getImageData(0, 0, canvas.width, canvas.height).data.buffer
+            );
+            return !buffer.some(color => color !== 0);
+        }
+
+        /* ==========================================================================
+         * 🎓 4. 학생 실시간 송출 엔진
          * ========================================================================== */
         async function startStudentBroadcasting() {
             const roomVal = document.getElementById('studentRoomInput').value.trim();
@@ -897,7 +1086,7 @@
                 document.getElementById('localCamLed').className = "w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse";
                 isCamActive = true;
             } catch (camErr) {
-                writeLog("카메라를 켜지 못했습니다. (연결 장치 없음 혹은 권한 거부): " + camErr.message, 'warn');
+                writeLog("카메라를 켜지 못했습니다. (장치 없음 혹은 권한 거부)", 'warn');
                 isCamActive = false;
             }
 
@@ -908,6 +1097,41 @@
 
             if (db && currentUser) {
                 setupStudentWebRTCConnection(roomVal, nameVal);
+                
+                // 학생 화면에서 선생님의 실시간 첨삭 이미지 감시 수신 리스너 추가 (Rule 3 준수)
+                db.collection('artifacts').doc(appId).collection('public').doc('data').collection('secure_signals').doc(`secure_signal_${roomVal}_${nameVal}`)
+                  .onSnapshot(doc => {
+                      const data = doc.data();
+                      const overlayImg = document.getElementById('studentAnnotationOverlay');
+                      if (data && data.teacherAnnotation) {
+                          overlayImg.src = data.teacherAnnotation;
+                          overlayImg.classList.remove('hidden');
+                      } else {
+                          overlayImg.src = "";
+                          overlayImg.classList.add('hidden');
+                      }
+                  }, err => {
+                      console.log("첨삭 수신 에러:", err);
+                  });
+            } else {
+                // 로컬 오프라인 브로드캐스트 채널을 통한 로컬 첨삭 감시 연동
+                if (typeof BroadcastChannel !== 'undefined') {
+                    if (window.localAnnotationListener) window.localAnnotationListener.close();
+                    window.localAnnotationListener = new BroadcastChannel('classshare_sandbox');
+                    window.localAnnotationListener.onmessage = (e) => {
+                        const data = e.data;
+                        if (data && data.type === 'annotation' && data.studentId === `secure_signal_${roomVal}_${nameVal}`) {
+                            const overlayImg = document.getElementById('studentAnnotationOverlay');
+                            if (data.teacherAnnotation) {
+                                overlayImg.src = data.teacherAnnotation;
+                                overlayImg.classList.remove('hidden');
+                            } else {
+                                overlayImg.src = "";
+                                overlayImg.classList.add('hidden');
+                            }
+                        }
+                    };
+                }
             }
 
             toast('송출 가동 완료', '관제 서버에 모니터링 전송을 개시했습니다.', 'emerald');
@@ -1000,9 +1224,7 @@
                           studentPc.setRemoteDescription(new RTCSessionDescription({
                               type: 'answer',
                               sdp: data.webrtcAnswer.sdp
-                          })).then(() => {
-                              writeLog("관제 PC와 WebRTC 비디오 스트리밍을 활성화했습니다.", "success");
-                          }).catch(e => console.log("Answer 수신 에러:", e));
+                          })).catch(e => console.log("Answer 수신 에러:", e));
                       }
                       
                       if (data && data.forceCamState !== undefined) {
@@ -1011,7 +1233,7 @@
                   });
 
             } catch (err) {
-                console.warn("WebRTC P2P 오류 (초압축 2채널 전송 우회 진행):", err);
+                console.warn("WebRTC P2P 오류 우회 진행:", err);
             }
         }
 
@@ -1051,6 +1273,12 @@
             document.getElementById('btnStudentStart').classList.remove('hidden');
             document.getElementById('btnStudentStop').classList.add('hidden');
 
+            const overlayImg = document.getElementById('studentAnnotationOverlay');
+            if (overlayImg) {
+                overlayImg.src = "";
+                overlayImg.classList.add('hidden');
+            }
+
             const roomVal = document.getElementById('studentRoomInput').value.trim();
             const nameVal = document.getElementById('studentNameInput').value.trim();
             if (db && roomVal && nameVal) {
@@ -1059,7 +1287,7 @@
         }
 
         /* ==========================================================================
-         * 🖥️ 5. 선생님 관제실 대시보드 시스템 (유령 기기 자동 소거 필터링 가동)
+         * 🖥️ 5. 선생님 관제실 대시보드 시스템
          * ========================================================================== */
         function startTeacherWaitingQueue() {
             const currentRoomId = document.getElementById('teacherRoomInput').value.trim();
@@ -1110,7 +1338,7 @@
                 }
             }
 
-            // 원장님 요청: 주기적 이탈 트래커 시간 단축 가동 (3초마다 유령 접속자 추적 및 원격 삭제)
+            // 12초 침묵 세션 자동 청소기 (주기 3초로 대폭 타이트하게 설정)
             if (queueCleanupInterval) clearInterval(queueCleanupInterval);
             queueCleanupInterval = setInterval(() => {
                 cleanAndRenderQueueList();
@@ -1118,7 +1346,7 @@
             }, 3000);
         }
 
-        // 대기 학생 동적 리스트 렌더러 (우측 사이드바: 5인 스크롤 한정판)
+        // 대기 학생 리스트 갱신 (원장님 요청: 🚫 강제퇴장 버튼 탑재)
         function cleanAndRenderQueueList() {
             const container = document.getElementById('studentQueueList');
             if (!container) return;
@@ -1127,35 +1355,31 @@
             const currentRoomId = document.getElementById('teacherRoomInput').value.trim();
             const activeKeys = Object.keys(activeStudentQueue);
 
-            // 1. 퇴실 상태(12초 침묵) 자동 정리 및 클라우드 소거 처리
             activeKeys.forEach(docId => {
                 const s = activeStudentQueue[docId];
                 const elapsed = now - s.lastActive;
 
+                // 12초 이상 무반응 침묵 기기 자동 클라우드 퇴장 파괴
                 if (elapsed > HEARTBEAT_TIMEOUT_MS || s.roomId !== currentRoomId) {
                     delete activeStudentQueue[docId];
                     
-                    // 만약 원장님이 보고 있던 학생이 나간 것이라면 팝업 및 레이더 알림 초기화
                     if (activeWatchingStudentId === docId) {
                         closeStudentDetailZoom();
                         resetCheatingAlertUI();
                     }
 
-                    // DOM 타일 즉각 삭제
                     const tileEl = document.getElementById(`tile_card_${docId}`);
                     if (tileEl) tileEl.remove();
 
-                    // 클라우드 데이터도 완전 정적 파괴 지시 (Rule 1 준수)
                     if (db && currentUser) {
                         db.collection('artifacts').doc(appId).collection('public').doc('data').collection('secure_signals').doc(docId).delete()
                         .then(() => {
-                            writeLog(`[자동 퇴실] 12초 이상 비활성 기기(${s.studentName}) 청소 완료.`, "info");
+                            writeLog(`[자동 소거] 미응답 12초 침묵 기기(${s.studentName})를 퇴실 처리했습니다.`, "info");
                         }).catch(()=>{});
                     }
                 }
             });
 
-            // 2. 남은 유효 학생 리스트 재생성
             container.innerHTML = "";
             let count = 0;
 
@@ -1166,6 +1390,7 @@
                 let statusBadge = '<span class="bg-emerald-500/10 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full border border-emerald-500/20 font-bold">연결 양호</span>';
                 let cardBorderClass = 'border-slate-800 bg-slate-900/40';
 
+                // 딴짓 화면 이탈 감지 시 깜빡이는 경고등 배지
                 if (s.isTabHidden) {
                     statusBadge = '<span class="bg-red-600 text-white text-[9px] px-2 py-0.5 rounded-full font-bold animate-pulse">화면 이탈(딴짓)!</span>';
                     cardBorderClass = 'border-red-500 bg-red-950/20';
@@ -1175,13 +1400,20 @@
                     <div class="p-2 border rounded-xl flex items-center justify-between transition-all ${cardBorderClass}">
                         <div class="space-y-1">
                             <div class="flex items-center space-x-2">
+                                <span class="w-2 h-2 rounded-full ${s.isTabHidden ? 'bg-red-500 animate-ping' : 'bg-emerald-500'}"></span>
                                 <strong class="text-xs text-white font-extrabold">${s.studentName}</strong>
                                 ${statusBadge}
                             </div>
                         </div>
-                        <button onclick="openStudentDetailZoom('${docId}')" class="text-[9px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1.5 rounded-lg transition active:scale-95">
-                            🔍 돋보기
-                        </button>
+                        <div class="flex items-center space-x-1.5">
+                            <button onclick="openStudentDetailZoom('${docId}')" class="text-[9px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1.5 rounded-lg transition active:scale-95">
+                                🔍 돋보기
+                            </button>
+                            <!-- 원장님 요청: 실시간 수동 강제 퇴장(삭제) 버튼 주입 -->
+                            <button onclick="forceKickStudent('${docId}', '${s.studentName}')" class="text-[9px] bg-rose-950/80 hover:bg-rose-900 border border-red-900/40 text-rose-400 px-2 py-1.5 rounded-lg transition" title="강의실에서 내보내기">
+                                🚫 강제 퇴장
+                            </button>
+                        </div>
                     </div>
                 `;
                 container.insertAdjacentHTML('beforeend', html);
@@ -1194,7 +1426,35 @@
             }
         }
 
-        // --- 원장님 핵심 요청 1: 바둑판 '정사각형' 타일 그리드 개편 ---
+        // 특정 세션 강제 추방 파괴 함수 (Firestore 문서 즉각 증발)
+        function forceKickStudent(docId, studentName) {
+            writeLog(`[강제 퇴장 지시] ${studentName} 기기의 세션을 수동으로 제거합니다.`, "warn");
+            
+            delete activeStudentQueue[docId];
+            
+            // UI 타일 카드 및 상세창 즉시 소거
+            const tileEl = document.getElementById(`tile_card_${docId}`);
+            if (tileEl) tileEl.remove();
+            
+            if (activeWatchingStudentId === docId) {
+                closeStudentDetailZoom();
+            }
+
+            if (db && currentUser) {
+                db.collection('artifacts').doc(appId).collection('public').doc('data').collection('secure_signals').doc(docId).delete()
+                .then(() => {
+                    toast('강제 퇴장 완료', `${studentName} 기기의 접속을 해제했습니다.`, 'amber');
+                    cleanAndRenderQueueList();
+                }).catch(err => {
+                    console.error("추방 명령 에러:", err);
+                });
+            } else {
+                toast('강제 퇴장 완료', `${studentName} 세션을 로컬에서 지웠습니다.`, 'indigo');
+                cleanAndRenderQueueList();
+            }
+        }
+
+        // --- 원장님 핵심 요청 1: 바둑판 '흰색 밀착 정사각형' 타일 그리드 전면 배치 ---
         function renderTeacherStudentTiles() {
             const board = document.getElementById('teacherTileBoard');
             if (!board) return;
@@ -1227,33 +1487,36 @@
                 let tileEl = document.getElementById(`tile_card_${docId}`);
 
                 const isCheating = student.isTabHidden;
-                const statusBorder = isCheating ? 'border-red-500 ring-2 ring-red-600/50' : 'border-slate-800';
-                const statusBg = isCheating ? 'bg-red-950/40' : 'bg-slate-950';
+                // 딴짓 상태에 따라 테두리색만 제어
+                const statusBorder = isCheating ? 'border-red-500 ring-2 ring-red-600/50 animate-pulse' : 'border-slate-800';
+                const statusBg = 'bg-slate-950';
 
-                // 타일 미존재 시 완전 정사각형 뼈대로 신규 빌드
+                // 타일 미존재 시 완전히 여백 없는 정사각형 뼈대 생성
                 if (!tileEl) {
                     const cardHtml = `
                         <div id="tile_card_${docId}" class="border rounded-2xl overflow-hidden shadow-md flex flex-col justify-between transition-all duration-300 ${statusBorder} ${statusBg}">
-                            <!-- 타일 헤더 -->
+                            <!-- 타일 헤더 (강제 퇴장 단축 버튼 및 이탈 깜빡이 점 탑재) -->
                             <div class="bg-slate-950 p-3 border-b border-slate-800/80 flex items-center justify-between">
                                 <div class="flex items-center space-x-1.5 overflow-hidden">
                                     <span class="w-2 h-2 rounded-full ${isCheating ? 'bg-red-500 animate-ping' : 'bg-emerald-500 animate-pulse'}"></span>
                                     <span class="text-xs font-extrabold text-white truncate max-w-[80px]">${student.studentName}</span>
                                 </div>
                                 <div class="flex items-center space-x-1">
-                                    <span id="tile_badge_${docId}" class="text-[8px] px-1.5 py-0.5 rounded-full font-bold"></span>
-                                    <button onclick="openStudentDetailZoom('${docId}')" class="text-[9px] bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-0.5 rounded font-extrabold" title="크게 보기">
-                                        🔍 상세
+                                    <span id="tile_badge_${docId}" class="text-[8px] px-1.5 py-0.5 rounded font-bold"></span>
+                                    <button onclick="openStudentDetailZoom('${docId}')" class="text-[9px] bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-0.5 rounded font-extrabold" title="크게 보기 및 실시간 첨삭">
+                                        🔍 상세/첨삭
+                                    </button>
+                                    <button onclick="forceKickStudent('${docId}', '${student.studentName}')" class="text-[9px] bg-rose-950 text-red-400 px-1.5 py-0.5 rounded hover:bg-rose-900 transition" title="강제 퇴장">
+                                        🚫 퇴장
                                     </button>
                                 </div>
                             </div>
                             
-                            <!-- 타일 본문 (검은색 상하단 여백 완전 제거: aspect-square 하얀색 캔버스로 가득 채움) -->
+                            <!-- 타일 본문 (검은색 상하좌우 여백 완전 영구 말살: 순백색 bg-white 일치) -->
                             <div class="relative bg-white aspect-square flex items-center justify-center overflow-hidden w-full">
-                                <!-- 드로잉 백그라운드 프레임 (이미지 풀 바인딩) -->
                                 <img id="tile_img_canvas_${docId}" class="w-full h-full object-contain bg-white" src="" alt="연습장 미러">
                                 
-                                <!-- 우측 상단 소형 캡처 카메라 인셋 박스 -->
+                                <!-- 우측 상단 소형 전면 카메라 인셋 박스 -->
                                 <div class="absolute top-2 right-2 w-[30%] aspect-video bg-black rounded-lg border border-indigo-500 shadow-md overflow-hidden z-20">
                                     <div id="tile_img_camera_${docId}" class="w-full h-full flex items-center justify-center bg-slate-900">
                                         <i class="fa-solid fa-video-slash text-[8px] text-slate-600"></i>
@@ -1266,7 +1529,6 @@
                     tileEl = document.getElementById(`tile_card_${docId}`);
                 }
 
-                // 매 프레임 동적 데이터 주입
                 const imgCanvas = document.getElementById(`tile_img_canvas_${docId}`);
                 if (imgCanvas && student.canvasFrame) {
                     imgCanvas.src = student.canvasFrame;
@@ -1295,7 +1557,7 @@
                 tileEl.className = `border rounded-2xl overflow-hidden shadow-md flex flex-col justify-between transition-all duration-300 ${statusBorder} ${statusBg}`;
             });
 
-            // 오프라인으로 사라진 학생 카드 돔(DOM) 즉시 소거 처리
+            // 오프라인 소거 보정
             const domTiles = board.querySelectorAll("[id^='tile_card_']");
             domTiles.forEach(tile => {
                 const id = tile.id.replace("tile_card_", "");
@@ -1305,7 +1567,7 @@
             });
         }
 
-        // --- 원장님 핵심 요청 2: 상세 돋보기 뷰 필기 검은화면 버그 완전 차단 구조 수립 ---
+        // --- 상세 돋보기 뷰 진입 및 원격 첨삭 연결 가동 ---
         function openStudentDetailZoom(docId) {
             activeWatchingStudentId = docId;
             const student = activeStudentQueue[docId];
@@ -1314,9 +1576,18 @@
             document.getElementById('zoomStudentName').innerText = student.studentName;
             document.getElementById('studentDetailZoomModal').classList.remove('hidden');
 
-            // 기본 필기장 이미지 동기화 가동
+            // 돋보기 캔버스 사이즈 최적화 피팅
+            setTimeout(() => {
+                resizeZoomAnnotationCanvas();
+                // 이전 첨삭 내용이 있다면Firestore에서 읽어와서 복구하거나 혹은 깨끗하게 비움
+                clearZoomAnnotation(); 
+            }, 100);
+
+            // 기본 펜 세팅 (빨간펜 기본)
+            setZoomPen('#ef4444', 4);
+
             document.getElementById('zoomRemoteImage').src = student.canvasFrame || "";
-            document.getElementById('zoomRemoteImage').classList.remove('hidden'); // 절대로 안 숨김
+            document.getElementById('zoomRemoteImage').classList.remove('hidden');
 
             document.getElementById('zoomCameraImageFrame').innerHTML = student.cameraFrame 
                 ? `<img class="w-full h-full object-cover scale-x-[-1]" src="${student.cameraFrame}" />` 
@@ -1336,12 +1607,10 @@
                           establishTeacherP2PLink(docId, data.webrtcOffer);
                       }
 
-                      // 실시간 미러링 필기장 프레임 업데이트
                       if (data.canvasFrame) {
                           document.getElementById('zoomRemoteImage').src = data.canvasFrame;
                       }
                       
-                      // 2채널 우회 카메라 프레임 수신 처리 (WebRTC 미가동 시 백업용)
                       if (data.cameraFrame && (!teacherPc || teacherPc.connectionState !== 'connected')) {
                           document.getElementById('zoomCameraImageFrame').classList.remove('hidden');
                           document.getElementById('zoomRemoteCamera').classList.add('hidden');
@@ -1352,6 +1621,9 @@
         }
 
         function closeStudentDetailZoom() {
+            // 퇴실 전 클라우드 첨삭 레이어 영구 삭제 지시하여 학생 화면을 깨끗하게 원상 복귀
+            clearZoomAnnotation();
+            
             document.getElementById('studentDetailZoomModal').classList.add('hidden');
             if (teacherActiveListener) {
                 teacherActiveListener();
@@ -1364,26 +1636,20 @@
             document.getElementById('zoomRemoteCamera').srcObject = null;
             document.getElementById('zoomRemoteCamera').classList.add('hidden');
             document.getElementById('zoomCameraImageFrame').classList.remove('hidden');
-            writeLog("상세 현미경 관제를 해제하고 다중 타일 대시보드로 복귀했습니다.");
+            activeWatchingStudentId = "";
+            writeLog("상세 첨삭 관제를 종료하고 대시보드로 복귀했습니다.");
         }
 
-        // WebRTC P2P 카메라 파이프라인 정밀 연결 (버그 교정: 메인 드로잉보드 대신 플로팅 비디오로 정확히 유입)
         async function establishTeacherP2PLink(docId, offer) {
             try {
                 writeLog("상세 관제용 WebRTC 1:1 터널링 수립 시도...", "info");
                 teacherPc = new RTCPeerConnection(iceServersConfig);
 
-                teacherPc.onconnectionstatechange = () => {
-                    writeLog(`[WebRTC 자가진단] 상세방 직결 수립 단계: ${teacherPc.connectionState}`, "info");
-                };
-
                 teacherPc.ontrack = function(event) {
-                    // ★ 버그 완벽 차단: 스트림을 메인이 아닌 '우측 상단 플로팅 카메라 소형 창'으로 투입합니다.
                     const zoomCamVideo = document.getElementById('zoomRemoteCamera');
                     zoomCamVideo.srcObject = event.streams[0];
-                    zoomCamVideo.classList.remove('hidden'); // 소형 비디오 노출
+                    zoomCamVideo.classList.remove('hidden');
                     
-                    // 우회 이미지 프레임 공간은 히든 처리
                     const zoomCamImgFrame = document.getElementById('zoomCameraImageFrame');
                     if (zoomCamImgFrame) zoomCamImgFrame.classList.add('hidden');
 
@@ -1405,7 +1671,7 @@
                 }, { merge: true });
 
             } catch (err) {
-                console.warn("P2P 터널링 미지원 (안전 중계 채널을 통한 관제는 계속 유지됨):", err);
+                console.warn("P2P 터널링 우회 진행:", err);
             }
         }
 
