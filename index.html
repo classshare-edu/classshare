@@ -1657,13 +1657,23 @@ function startTeacherAnnotation(docId, event) {
 
 function endTeacherAnnotation(docId) {
 
-	// 1. 첨삭 모드 종료
+	// 1. 첨삭 모드 종료 처리
     isAnnotating = false;
     
-    // 2. 원래 화면으로 돌아가면 다시 갱신 시작 (인터벌 복구)
+    // 2. 인터벌 복구 (지역 변수 대신 전역 혹은 필요한 값을 직접 전달)
     if (studentInterval) clearInterval(studentInterval);
+    
+    // 전역 변수(roomVal, nameVal)가 함수 밖에 선언되어 있는지 확인하세요.
+    // 만약 선언되어 있지 않다면, 아래와 같이 현재 접속된 정보를 활용해야 합니다.
     studentInterval = setInterval(() => {
-        sendStudentSnapshotRelay(roomVal, nameVal);
+        // roomVal, nameVal이 실제 어디서 오는지 확인 후, 
+        // 전역으로 관리되는 값을 사용하도록 수정합니다.
+        if (typeof window.roomVal !== 'undefined' && typeof window.nameVal !== 'undefined') {
+            sendStudentSnapshotRelay(window.roomVal, window.nameVal);
+        } else {
+            // 혹은 이미 알고 있는 값을 직접 넣어줍니다.
+            sendStudentSnapshotRelay(roomVal, nameVal); 
+        }
     }, 1500);
 
 
