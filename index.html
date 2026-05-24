@@ -436,15 +436,6 @@
 
     <!-- 통합 자바스크립트 소스코드 -->
     <script>
-
-		// 전역으로 관리할 학생 정보 변수
-		let currentcurrentRoomVal = "";
-		let currentcurrentNameVal = "";
-		//let studentInterval = null; // 인터벌 객체도 전역으로 관리
-
-
-
-
         // --- 글로벌 전역 상태 제어부 ---
         let db = null;
         let firebaseApp = null;
@@ -1095,13 +1086,12 @@
          * 🎓 4. 학생 실시간 송출 엔진
          * ========================================================================== */
         async function startStudentBroadcasting() {
-			// 1. 전역 변수에 값 저장
-			currentcurrentRoomVal = document.getElementById('studentRoomInput').value.trim();
-			currentcurrentNameVal = document.getElementById('studentNameInput').value.trim();
+            const roomVal = document.getElementById('studentRoomInput').value.trim();
+            const nameVal = document.getElementById('studentNameInput').value.trim();
 
-			if (!currentcurrentRoomVal || !currentcurrentNameVal) {
-				return toast('입력값 누락', '강의실 코드와 학생 이름을 입력해 주세요.', 'red');
-			}
+            if (!roomVal || !nameVal) {
+                return toast('입력값 누락', '강의실 코드와 학생 이름을 입력해 주세요.', 'red');
+            }
 
             document.getElementById('localCamLed').className = "w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse";
             document.getElementById('btnStudentStart').classList.add('hidden');
@@ -1122,17 +1112,16 @@
                 isCamActive = false;
             }
 
-			// 2. 인터벌 설정 (전역 변수 사용)
-			if (studentInterval) clearInterval(studentInterval);
-			studentInterval = setInterval(() => {
-				sendStudentSnapshotRelay(currentRoomVal, currentNameVal);
-			}, 1500);
+            if (studentInterval) clearInterval(studentInterval);
+            studentInterval = setInterval(() => {
+                sendStudentSnapshotRelay(roomVal, nameVal);
+            }, 1500);
 
             if (db && currentUser) {
-                setupStudentWebRTCConnection(currentRoomVal, currentNameVal);
+                setupStudentWebRTCConnection(roomVal, nameVal);
                 
                 // 학생 화면에서 선생님의 실시간 첨삭 이미지 감시 수신 리스너 추가 (Rule 3 준수)
-                db.collection('artifacts').doc(appId).collection('public').doc('data').collection('secure_signals').doc(`secure_signal_${currentRoomVal}_${currentNameVal}`)
+                db.collection('artifacts').doc(appId).collection('public').doc('data').collection('secure_signals').doc(`secure_signal_${roomVal}_${nameVal}`)
                   .onSnapshot(doc => {
                       const data = doc.data();
                       const overlayImg = document.getElementById('studentAnnotationOverlay');
@@ -1153,7 +1142,7 @@
                     window.localAnnotationListener = new BroadcastChannel('classshare_sandbox');
                     window.localAnnotationListener.onmessage = (e) => {
                         const data = e.data;
-                        if (data && data.type === 'annotation' && data.studentId === `secure_signal_${currentRoomVal}_${currentNameVal}`) {
+                        if (data && data.type === 'annotation' && data.studentId === `secure_signal_${roomVal}_${nameVal}`) {
                             const overlayImg = document.getElementById('studentAnnotationOverlay');
                             if (data.teacherAnnotation) {
                                 overlayImg.src = data.teacherAnnotation;
@@ -1168,7 +1157,7 @@
             }
 
             toast('송출 가동 완료', '관제 서버에 모니터링 전송을 개시했습니다.', 'emerald');
-            writeLog(`학생 송출 개시 (강의실: ${currentRoomVal}, 실명: ${currentNameVal})`, 'success');
+            writeLog(`학생 송출 개시 (강의실: ${roomVal}, 실명: ${nameVal})`, 'success');
             
             setTimeout(resizeCanvasElement, 400);
         }
@@ -1312,10 +1301,10 @@
                 overlayImg.classList.add('hidden');
             }
 
-            const currentRoomVal = document.getElementById('studentRoomInput').value.trim();
-            const currentNameVal = document.getElementById('studentNameInput').value.trim();
-            if (db && currentRoomVal && currentNameVal) {
-                db.collection('artifacts').doc(appId).collection('public').doc('data').collection('secure_signals').doc(`secure_signal_${currentRoomVal}_${currentNameVal}`).delete().catch(()=>{});
+            const roomVal = document.getElementById('studentRoomInput').value.trim();
+            const nameVal = document.getElementById('studentNameInput').value.trim();
+            if (db && roomVal && nameVal) {
+                db.collection('artifacts').doc(appId).collection('public').doc('data').collection('secure_signals').doc(`secure_signal_${roomVal}_${nameVal}`).delete().catch(()=>{});
             }
         }
 
@@ -1668,15 +1657,23 @@ function startTeacherAnnotation(docId, event) {
 
 function endTeacherAnnotation(docId) {
 
-	// 1. 첨삭 모드 종료 처리
-	isAnnotating = false;
-
-    // 인터벌 재시작: 전역 변수를 사용하므로 에러가 나지 않습니다.
+// 1. 첨삭 모드 종료 처리
+    isAnnotating = false;
+    
+    // 2. 인터벌 복구 (지역 변수 대신 전역 혹은 필요한 값을 직접 전달)
     if (studentInterval) clearInterval(studentInterval);
     
+    // 전역 변수(roomVal, nameVal)가 함수 밖에 선언되어 있는지 확인하세요.
+    // 만약 선언되어 있지 않다면, 아래와 같이 현재 접속된 정보를 활용해야 합니다.
     studentInterval = setInterval(() => {
-        // 전역 변수를 참조
-        sendStudentSnapshotRelay(currentRoomVal, currentNameVal);
+        // roomVal, nameVal이 실제 어디서 오는지 확인 후, 
+        // 전역으로 관리되는 값을 사용하도록 수정합니다.
+        if (typeof window.roomVal !== 'undefined' && typeof window.nameVal !== 'undefined') {
+            sendStudentSnapshotRelay(window.roomVal, window.nameVal);
+        } else {
+            // 혹은 이미 알고 있는 값을 직접 넣어줍니다.
+            sendStudentSnapshotRelay(roomVal, nameVal); 
+        }
     }, 1500);
 
 
@@ -1865,10 +1862,10 @@ function endTeacherAnnotation(docId) {
         function setupWindowFocusListeners() {
             document.addEventListener('visibilitychange', () => {
                 if (activeRole === 'student') {
-                    const currentRoomVal = document.getElementById('studentRoomInput').value.trim();
-                    const currentNameVal = document.getElementById('studentNameInput').value.trim();
-                    if (currentRoomVal && currentNameVal) {
-                        sendStudentSnapshotRelay(currentRoomVal, currentNameVal);
+                    const roomVal = document.getElementById('studentRoomInput').value.trim();
+                    const nameVal = document.getElementById('studentNameInput').value.trim();
+                    if (roomVal && nameVal) {
+                        sendStudentSnapshotRelay(roomVal, nameVal);
                     }
                 }
             });
