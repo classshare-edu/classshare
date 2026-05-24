@@ -960,23 +960,23 @@
 
 // 1. 캔버스 리사이즈 및 정렬 최적화
 function resizeZoomAnnotationCanvas() {
+    // 1. 캔버스 요소 자체가 있는지 먼저 확인
+    const canvas = document.getElementById('zoomAnnotationCanvas');
     const wrapper = document.getElementById('zoomCanvasWrapper');
-    const targetImg = document.getElementById('zoomRemoteImage'); // 기존 id 유지
+    const targetImg = document.getElementById('zoomRemoteImage');
     
-    if (!wrapper || !targetImg) return;
-
-    // 이미지가 아직 로드되지 않았으면 크기가 0일 수 있으므로 로드 완료를 기다림
-    if (targetImg.naturalWidth === 0) {
-        targetImg.onload = resizeZoomAnnotationCanvas;
+    // 2. 요소가 없거나(모달이 닫힘), 이미지가 안 보이면 즉시 중단
+    if (!canvas || !wrapper || !targetImg || targetImg.clientWidth === 0) {
+        console.warn("캔버스 리사이즈 중단: 요소 로딩 대기 중...");
         return;
     }
 
-    // 캔버스 크기를 이미지와 동일하게 맞춤
-    zoomAnnotationCanvas.width = targetImg.clientWidth;
-    zoomAnnotationCanvas.height = targetImg.clientHeight;
+    // 3. 안전하게 속성 적용
+    canvas.width = targetImg.clientWidth;
+    canvas.height = targetImg.clientHeight;
     
-    // 배경 투명화 및 초기화
-    zoomAnnCtx.clearRect(0, 0, zoomAnnotationCanvas.width, zoomAnnotationCanvas.height);
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 }
 
 
@@ -1666,26 +1666,53 @@ function checkCanvasSize() {
 }
 // openStudentDetailZoom 마지막에 호출해서 0이 나오는지 확인하세요.
 
+function closeStudentDetailZoom() {
+    // 1. [안전 장치] 모달 요소 확인 후 닫기
+    const modal = document.getElementById('studentDetailZoomModal');
+    if (modal) modal.classList.add('hidden');
 
-        function closeStudentDetailZoom() {
-            // 퇴실 전 클라우드 첨삭 레이어 영구 삭제 지시하여 학생 화면을 깨끗하게 원상 복귀
-            clearZoomAnnotation();
-            
-            document.getElementById('studentDetailZoomModal').classList.add('hidden');
-            if (teacherActiveListener) {
-                teacherActiveListener();
-                teacherActiveListener = null;
-            }
-            if (teacherPc) {
-                teacherPc.close();
-                teacherPc = null;
-            }
-            document.getElementById('zoomRemoteCamera').srcObject = null;
-            document.getElementById('zoomRemoteCamera').classList.add('hidden');
-            document.getElementById('zoomCameraImageFrame').classList.remove('hidden');
-            activeWatchingStudentId = "";
-            writeLog("상세 첨삭 관제를 종료하고 대시보드로 복귀했습니다.");
-        }
+    // 2. [필수] 이미지/캔버스 초기화
+    const remoteImg = document.getElementById('zoomRemoteImage');
+    if (remoteImg) {
+        remoteImg.src = ""; // 이미지 소스 비우기
+        remoteImg.classList.add('hidden');
+    }
+
+    // 캔버스 초기화 (안전하게 호출)
+    clearZoomAnnotation(); 
+
+    // 3. WebRTC 및 리스너 정리
+    if (teacherActiveListener) {
+        teacherActiveListener();
+        teacherActiveListener = null;
+    }
+    
+    if (teacherPc) {
+        teacherPc.close();
+        teacherPc = null;
+    }
+
+    // 4. 카메라 및 UI 초기화
+    const remoteCamera = document.getElementById('zoomRemoteCamera');
+    if (remoteCamera) {
+        remoteCamera.srcObject = null;
+        remoteCamera.classList.add('hidden');
+    }
+    
+    const cameraFrame = document.getElementById('zoomCameraImageFrame');
+    if (cameraFrame) {
+        cameraFrame.classList.remove('hidden');
+        cameraFrame.innerHTML = `<div class="w-full h-full bg-slate-900 flex flex-col items-center justify-center text-slate-600 text-[10px]"><i class="fa-solid fa-video-slash mb-1"></i>캠 꺼짐</div>`;
+    }
+
+    activeWatchingStudentId = "";
+    if (typeof writeLog === 'function') {
+        writeLog("상세 첨삭 관제를 종료하고 대시보드로 복귀했습니다.");
+    }
+}
+
+
+
 
         async function establishTeacherP2PLink(docId, offer) {
             try {
