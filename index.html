@@ -1627,7 +1627,8 @@ function endTeacherAnnotation(docId) {
 
 
         // --- 상세 돋보기 뷰 진입 및 원격 첨삭 연결 가동 ---
-        function openStudentDetailZoom(docId) {
+/*
+		function openStudentDetailZoom(docId) {
             activeWatchingStudentId = docId;
             const student = activeStudentQueue[docId];
             if (!student) return;
@@ -1678,6 +1679,8 @@ function endTeacherAnnotation(docId) {
                   });
             }
         }
+*/
+
 
         function closeStudentDetailZoom() {
             // 퇴실 전 클라우드 첨삭 레이어 영구 삭제 지시하여 학생 화면을 깨끗하게 원상 복귀
