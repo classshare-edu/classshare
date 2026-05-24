@@ -1672,8 +1672,10 @@ function endTeacherAnnotation(docId) {
 	isAnnotating = false;
 
 	// 2. [가장 중요] 기존 인터벌을 완전히 제거
-    if (typeof studentInterval !== 'undefined') {
+    // 2. 해당 학생의 화면 갱신 인터벌이 있다면 일시 정지
+    if (typeof studentInterval !== 'undefined' && studentInterval) {
         clearInterval(studentInterval);
+        console.log("첨삭 모드 진입: 학생 화면 갱신을 일시 중지합니다.");
         studentInterval = null; // null로 초기화하여 중첩 방지
     }
     
