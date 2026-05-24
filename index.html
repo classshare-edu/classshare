@@ -105,6 +105,15 @@
         </div>
     </div>
 
+    <!-- 파이어베이스 실시간 장애 자가진단 경고 툴바 -->
+    <div id="cloudWarningBanner" class="bg-amber-950 border-b border-amber-800/80 text-amber-200 px-6 py-2.5 text-xs flex justify-between items-center gap-4 hidden">
+        <div class="flex items-center space-x-2">
+            <i class="fa-solid fa-triangle-exclamation text-amber-400 text-sm animate-pulse"></i>
+            <span id="cloudWarningText" class="font-medium">⚠️ 파이어베이스 서버 연결 대기 중...</span>
+        </div>
+        <button onclick="toggleSettings(true)" class="bg-amber-500/20 hover:bg-amber-500/40 text-amber-200 font-bold px-3 py-1 rounded-lg border border-amber-500/30 transition text-[10px]">설정 진단</button>
+    </div>
+
     <!-- 통합 상단 헤더바 -->
     <header class="border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-md sticky top-0 z-40 px-6 py-4 flex flex-wrap justify-between items-center gap-4">
         <div class="flex items-center space-x-3">
@@ -261,7 +270,7 @@
                         <!-- 1채널: WebRTC 다이렉트 비디오 -->
                         <video id="teacherRemoteVideo" autoplay playsinline class="w-full h-full object-contain"></video>
 
-                        <!-- 2채널: 이미지 연속 프레임 중계기 (방화벽 차단 및 오프라인 우회 라이브 렌더러) -->
+                        <!-- 2채널: 이미지 연속 프레임 중계기 -->
                         <img id="teacherRemoteImage" class="absolute inset-0 w-full h-full object-contain bg-slate-950 hidden z-10" alt="실시간 이미지 중계">
 
                         <!-- 학생 우측 하단 합성 카메라 윈도우 -->
@@ -429,7 +438,7 @@
                 try {
                     const decoded = decodeURIComponent(escape(atob(paramConfig)));
                     localStorage.setItem('saas_firebase_config', decoded);
-                    writeLog("초대 링크의 클라우드 인증키를 기기에 자동 셋업했습니다.", "success");
+                    writeLog("초대 링크의 클라우드 인증키를 기기에 자동 적용했습니다.", "success");
                 } catch (e) {
                     console.error("Config decoding failed", e);
                 }
@@ -489,6 +498,7 @@
             if (style === 'alert') styleClass = 'text-rose-400 font-bold';
             if (style === 'success') styleClass = 'text-emerald-400';
             if (style === 'warn') styleClass = 'text-amber-400';
+            if (style === 'info') styleClass = 'text-indigo-400';
 
             const logBox = document.getElementById('systemLogConsole');
             if (logBox) {
@@ -497,27 +507,49 @@
             }
         }
 
-        // --- 파이어베이스 자가 구동 엔진 (비동기 안정성 확보) ---
+        // --- 파이어베이스 자가 구동 엔진 (비동기 안정성 확보 및 명확한 에러 표시) ---
         async function tryLoadFirebase() {
             let config = null;
+            let source = "none";
 
-            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-                try { 
-                    config = typeof __firebase_config === 'object' ? __firebase_config : JSON.parse(__firebase_config); 
+            // 1. 초대 링크 URL 파라미터에서 먼저 시도 (Iframe 내부 localStorage가 무력화될 때를 대비한 1순위 구원책)
+            const urlParams = new URLSearchParams(window.location.search);
+            const paramConfig = urlParams.get('config');
+            if (paramConfig) {
+                try {
+                    const decoded = decodeURIComponent(escape(atob(paramConfig)));
+                    config = JSON.parse(decoded);
+                    source = "연동 링크";
+                    try { localStorage.setItem('saas_firebase_config', decoded); } catch(e) {}
                 } catch (e) {
-                    console.error("Config parse error:", e);
+                    console.error("URL Parameter config parse fail:", e);
                 }
             }
 
-            if (!config) {
-                const saved = localStorage.getItem('saas_firebase_config');
-                if (saved) {
-                    try { config = JSON.parse(saved); } catch (e) {}
+            // 2. 내부 주입 전역 변수 점검
+            if (!config && typeof __firebase_config !== 'undefined' && __firebase_config) {
+                try { 
+                    config = typeof __firebase_config === 'object' ? __firebase_config : JSON.parse(__firebase_config); 
+                    source = "시스템 변수";
+                } catch (e) {
+                    console.error("System Config parse error:", e);
                 }
+            }
+
+            // 3. 브라우저 저장소 점검
+            if (!config) {
+                try {
+                    const saved = localStorage.getItem('saas_firebase_config');
+                    if (saved) {
+                        config = JSON.parse(saved);
+                        source = "기기 내부 저장소";
+                    }
+                } catch (e) {}
             }
 
             if (config) {
                 try {
+                    writeLog(`설정 데이터를 로드하는 중 (${source})...`, "info");
                     if (firebase.apps.length === 0) {
                         firebaseApp = firebase.initializeApp(config);
                     } else {
@@ -525,7 +557,8 @@
                     }
                     db = firebaseApp.firestore();
 
-                    // 익명 인증 및 Custom Token 규칙 강제 (Rule 3 준수)
+                    // 익명 로그인 가동 (Rule 3)
+                    writeLog("파이어베이스 인증 채널을 연결 중...", "info");
                     let userCredential;
                     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                         userCredential = await firebase.auth().signInWithCustomToken(__initial_auth_token);
@@ -534,23 +567,39 @@
                     }
                     currentUser = userCredential.user;
                     
-                    document.getElementById('networkIndicatorLed').className = "w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse";
-                    document.getElementById('networkModeText').innerText = "클라우드 동기화 가동 중";
-                    writeLog(`클라우드 통신망 구축 완료 (UID: ${currentUser.uid})`, "success");
-                    return;
+                    // 연결 성공 UI 정합 처리
+                    document.getElementById('networkIndicatorLed').className = "w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse";
+                    document.getElementById('networkModeText').innerText = "클라우드 무선 관제망 개통";
+                    document.getElementById('cloudWarningBanner').classList.add('hidden');
+                    writeLog(`파이어베이스 무선 중계소 동기화 성공! (UID: ${currentUser.uid})`, "success");
+                    return true;
                 } catch (err) {
-                    writeLog("클라우드 인증 에러: " + err.message, "alert");
+                    let friendlyMsg = err.message;
+                    // 익명 인증이 안 꺼져 있는지 콘솔에 대대적으로 명시함
+                    if (err.code === 'auth/operation-not-allowed') {
+                        friendlyMsg = "파이어베이스 콘솔에서 '익명 로그인' 기능이 꺼져 있습니다. [Firebase 콘솔 > Authentication > Sign-in method]에서 '익명(Anonymous)'을 반드시 [사용 설정]으로 활성화해 주세요!";
+                    }
+                    showCloudErrorBanner(friendlyMsg);
+                    writeLog("클라우드 연동 실패: " + friendlyMsg, "alert");
                 }
+            } else {
+                showCloudErrorBanner("등록된 파이어베이스 Config 설정값이 없습니다. 우측 상단 ⚙️ 설정을 클릭해 연동을 완료해 주세요.");
             }
             initLocalSandboxSignaling();
+            return false;
+        }
+
+        function showCloudErrorBanner(msg) {
+            document.getElementById('cloudWarningText').innerText = `⚠️ 클라우드 연동 안됨: ${msg}`;
+            document.getElementById('cloudWarningBanner').classList.remove('hidden');
         }
 
         function initLocalSandboxSignaling() {
             db = null;
             currentUser = null;
             document.getElementById('networkIndicatorLed').className = "w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse";
-            document.getElementById('networkModeText').innerText = "로컬 모드";
-            writeLog("로컬 통신 모드입니다. 다른 태블릿 기기들과 무선 연동하려면 [⚙️] 설정 아이콘을 눌러 파이어베이스 키를 등록해 주세요.", "warn");
+            document.getElementById('networkModeText').innerText = "로컬 모드 (오프라인)";
+            writeLog("로컬 통신 모드입니다. 다른 단독 태블릿 기기들과 무선 연동하려면 [⚙️] 설정 아이콘을 눌러 파이어베이스 키를 등록해 주세요.", "warn");
         }
 
         // --- 학생/선생님 화면 제어 전환 모듈 (스크롤 락 해제 및 보정 적용) ---
@@ -821,17 +870,28 @@
             }
         }
 
-        // WebRTC P2P 직결 구성 수립
+        // WebRTC P2P 직결 구성 수립 및 커넥션 자가진단 콘솔 연계
         async function setupStudentWebRTCConnection(roomId, studentName) {
             try {
+                writeLog("WebRTC P2P 미디어 조율 기기 세팅 개시...", "info");
                 studentPc = new RTCPeerConnection(iceServersConfig);
 
                 if (studentCamStream) {
                     studentCamStream.getTracks().forEach(track => studentPc.addTrack(track, studentCamStream));
                 }
 
+                // ICE 상태 체크용 리스너 연계
+                studentPc.onicegatheringstatechange = () => {
+                    writeLog(`[WebRTC 자가진단] ICE 후보 수집 상태: ${studentPc.iceGatheringState}`, "info");
+                };
+
+                studentPc.onconnectionstatechange = () => {
+                    writeLog(`[WebRTC 자가진단] 1:1 직결 수립 진행 단계: ${studentPc.connectionState}`, "info");
+                };
+
                 studentPc.onicecandidate = function(e) {
                     if (e.candidate === null && studentPc.localDescription) {
+                        writeLog("[WebRTC 자가진단] P2P 로컬 SDP 설명 구성 완료. 시그널 서버 업로드 시도...", "info");
                         db.collection('artifacts').doc(appId).collection('public').doc('data').collection('secure_signals').doc(`secure_signal_${roomId}_${studentName}`).set({
                             webrtcOffer: {
                                 type: 'offer',
@@ -853,7 +913,7 @@
                               type: 'answer',
                               sdp: data.webrtcAnswer.sdp
                           })).then(() => {
-                              writeLog("관제 PC와 WebRTC 비디오 스트리밍을 활성화했습니다.", "success");
+                              writeLog("관제 PC와 1:1 WebRTC 미디어 직결 수립을 정합 완료했습니다.", "success");
                           }).catch(e => console.log("Answer 수신 에러:", e));
                       }
                       
@@ -1098,7 +1158,16 @@
 
         async function establishTeacherP2PLink(docId, offer) {
             try {
+                writeLog("관제 수신용 P2P WebRTC 포트 구성 시작...", "info");
                 teacherPc = new RTCPeerConnection(iceServersConfig);
+
+                teacherPc.onicegatheringstatechange = () => {
+                    writeLog(`[WebRTC 자가진단] 관제실 ICE 수집 상태: ${teacherPc.iceGatheringState}`, "info");
+                };
+
+                teacherPc.onconnectionstatechange = () => {
+                    writeLog(`[WebRTC 자가진단] P2P 연동 성공 단계: ${teacherPc.connectionState}`, "info");
+                };
 
                 teacherPc.ontrack = function(event) {
                     const videoEl = document.getElementById('teacherRemoteVideo');
@@ -1106,6 +1175,7 @@
                     document.getElementById('teacherRemoteImage').classList.add('hidden');
                     document.getElementById('teacherStreamQualityBadge').innerText = "P2P WebRTC 초고속 스트리밍 중";
                     document.getElementById('teacherStreamQualityBadge').className = "bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[10px] px-2.5 py-1 rounded-full font-bold";
+                    writeLog("P2P 터널링 연동 완료! 학생 태블릿에서 끊김 없는 고주사율 영상 프레임을 수신합니다.", "success");
                 };
 
                 await teacherPc.setRemoteDescription(new RTCSessionDescription(offer));
