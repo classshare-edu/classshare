@@ -144,7 +144,7 @@
         <div class="relative flex-grow bg-slate-950 flex items-center justify-center p-4 overflow-hidden">
             <div class="relative max-w-full max-h-[80vh] aspect-[4/3] bg-white rounded-2xl shadow-2xl overflow-hidden" id="zoomCanvasWrapper">
                 <!-- 1층: 학생이 보내는 실시간 필기장 화면 (순백색 일치) -->
-                <img id="zoomRemoteImage" class="absolute inset-0 w-full h-full object-contain bg-white select-none pointer-events-none" alt="실시간 연습장 확대">
+                <img id="studentNotebookImage" class="absolute inset-0 w-full h-full object-contain bg-white select-none pointer-events-none" alt="실시간 연습장 확대">
                 
                 <!-- 2층: 선생님이 학생 화면 위에 덧그리는 첨삭 투명 캔버스 레이어 -->
                 <canvas id="zoomAnnotationCanvas" class="absolute inset-0 w-full h-full z-10 bg-transparent pointer-events-auto"></canvas>
@@ -934,17 +934,31 @@
             zoomAnnotationCanvas.addEventListener('touchend', endZoomDrawing);
         }
 
-        function resizeZoomAnnotationCanvas() {
-            const wrapper = document.getElementById('zoomCanvasWrapper');
-            if (!wrapper || wrapper.clientWidth === 0) return;
-            
-            // 학생 필기 이미지 크기에 정확히 대응 동기화
-            zoomAnnotationCanvas.width = wrapper.clientWidth;
-            zoomAnnotationCanvas.height = wrapper.clientHeight;
-            
-            // 투명 배경 보존
-            zoomAnnCtx.clearRect(0, 0, zoomAnnotationCanvas.width, zoomAnnotationCanvas.height);
-        }
+
+
+
+function resizeZoomAnnotationCanvas() {
+    const wrapper = document.getElementById('zoomCanvasWrapper');
+    const targetImg = document.getElementById('studentNotebookImage'); // 수정된 ID
+    
+    if (!wrapper || !targetImg) return;
+
+    // 이미지의 실제 크기를 캔버스 속성에 반영
+    zoomAnnotationCanvas.width = targetImg.clientWidth;
+    zoomAnnotationCanvas.height = targetImg.clientHeight;
+    
+    zoomAnnCtx.clearRect(0, 0, zoomAnnotationCanvas.width, zoomAnnotationCanvas.height);
+}
+
+// [핵심] 이미지가 로드될 때마다 캔버스 크기 재조정
+document.getElementById('studentNotebookImage').onload = function() {
+    resizeZoomAnnotationCanvas();
+};
+
+
+
+
+
 
         function startZoomDrawing(e) {
             isZoomDrawing = true;
